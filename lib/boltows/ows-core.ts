@@ -84,8 +84,7 @@ const PRICE_FEED_IDS: Record<string, string> = {
   "monad": "0x",
   "sui": "0x50c18d9ef61730bb53c448eb3b054817a2e0a010899def360e4282367f08365a",
   "coredao": "0x1bf60fe662ecab2f06997df00c61f86778eaa158850043ae999971477f4a0f97",
-  "tron": "0x386d389658f8446b3e15b57d0eb5f7f9011b93fdf9602a99d40b798e4d293223",
-  "xrpl_evm": "0x36d3273401d7e2499c944a951d072f78e47458f6fb938817440ba2488d21c972"
+  "tron": "0x386d389658f8446b3e15b57d0eb5f7f9011b93fdf9602a99d40b798e4d293223"
 };
 
 const DERIVATION_PATHS: Record<string, string> = {
@@ -97,7 +96,8 @@ const DERIVATION_PATHS: Record<string, string> = {
   "monad": "m/44'/60'/0'/0/",
   "bitcoin": "m/84'/0'/0'/0/",
   "sui": "m/44'/784'/0'/0'/",
-  "tron": "m/44'/195'/0'/0/",
+  "xrpl_evm": "m/44'/60'/0'/0/",
+  "tron_evm": "m/44'/60'/0'/0/",
   "coredao": "m/44'/60'/0'/0/"
 };
 
@@ -115,7 +115,7 @@ let sessionMnemonic: string | null = null;
 
 export class BoltwalletCore {
   private chainId: string = 'ethereum';
-  
+
   async getWallets() { return listWallets(); }
   async listWallets() { return listWallets(); } // Consistency for multi-UI support
   async createNewWallet(name: string) { return createWallet(name); }
@@ -123,9 +123,9 @@ export class BoltwalletCore {
   async unlockVault(password: string) { return unlockVault(password); }
   async isVaultSetup() { return isVaultSetup(); }
   async setupVault(password: string) { return setupVault(password); }
-  async getNativeBalance(address: string) { 
+  async getNativeBalance(address: string) {
     const rpc = CHAINS[this.chainId as keyof typeof CHAINS]?.rpc || '';
-    return getNativeBalance(address, rpc); 
+    return getNativeBalance(address, rpc);
   }
   async getContractBalance(contractAddress: string, walletAddress: string, decimals: number) {
     const rpc = CHAINS[this.chainId as keyof typeof CHAINS]?.rpc || '';
@@ -137,29 +137,29 @@ export class BoltwalletCore {
   }
   async listContracts() { return listContracts(this.chainId); }
   async importContract(name: string, address: string, abi: string, decimals: number) {
-     return importContract(name, address, abi, decimals, this.chainId);
+    return importContract(name, address, abi, decimals, this.chainId);
   }
   async deleteContract(address: string) {
-     return deleteContract(address, this.chainId);
+    return deleteContract(address, this.chainId);
   }
   async listNFTs() { return listNFTs(this.chainId); }
   async importNFT(address: string, tokenId: string, name: string) {
-     return importNFT(address, tokenId, name, this.chainId);
+    return importNFT(address, tokenId, name, this.chainId);
   }
   async deleteNFT(address: string, tokenId: string) {
-     return deleteNFT(address, tokenId, this.chainId);
+    return deleteNFT(address, tokenId, this.chainId);
   }
   async getAssetPrices() { return getAssetPrices(); }
   async getHistory(address: string) { return getHistory(address, this.chainId); }
   async signTransaction(walletId: string, tx: any) { return signTransaction(walletId, this.chainId, JSON.stringify(tx)); }
   async resetVault(mnemonic: string, pass: string) { return resetVault(mnemonic, pass); }
   async getSession() { return getSessionMnemonic(); }
-  
-  setChain(chainId: string) { 
-    this.chainId = chainId; 
+
+  setChain(chainId: string) {
+    this.chainId = chainId;
     setActiveChain(chainId);
   }
-  
+
   onLogs(cb: any) { return onLogs(cb); }
   getLogs() { return getLogs(); }
 
@@ -610,7 +610,7 @@ export const getAssetPrices = async (): Promise<Record<string, number>> => {
         const priceVal = feed.price.price || "0";
         prices[chain] = Number(priceVal) * Math.pow(10, expo);
       }
-    } catch (err) {}
+    } catch (err) { }
   }));
   return prices;
 };
