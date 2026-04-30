@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BOLT XR | Spatial Finance Wallet
 
-## Getting Started
+![BOLT XR Logo](./public/logo.png)
 
-First, run the development server:
+**BOLT XR** is a premium, immersive Web3 wallet platform designed for the next generation of spatial computing (VR/AR/XR). Built with Next.js, Three.js, and @react-three/xr, BOLT provides a "handtracking-first" experience for managing assets across multiple chains including Ethereum, Tron, and XRPL EVM.
 
+## 🚀 Key Features
+
+### 1. Immersive 3D Interface
+- **Spatial Dashboard**: A floating glassmorphic dashboard for balance tracking and connection management.
+- **High-Fidelity 3D Coins**: Real-time rendered metallic tokens with dynamic logo mapping and physics-inspired movement.
+- **Interactive Swap Scale**: A procedural 3D balancing scale for token exchanges. Drag and drop tokens onto the scale to initiate swaps with real-world price data.
+
+### 2. Advanced Security
+- **3D Security PIN Pad**: A fully immersive, in-scene authentication system. No desktop prompts or popups—unlock your vault directly in XR.
+- **Hardened Logic**: Anti-brute force mechanisms, 30-second lockouts after failed attempts, and physics-based "shake" feedback.
+- **Local Vault Substrate**: BIP39 mnemonic management with AES-GCM encryption stored securely in local storage.
+
+### 3. Dynamic Environments
+- **Landscape Selector**: Switch between multiple immersive scenarios including:
+  - **Deep Space**: The ultimate cosmic void.
+  - **Neon Sunset**: Retro-future aesthetics.
+  - **Zen Garden**: Minimalist green space.
+  - **Token Rain**: A spectacular scenario where your assets literally fall from the sky.
+
+### 4. Cross-Chain Support
+- **Multi-Chain Aggregation**: Native support for Ethereum, Polygon, BSC, Tron (TRX), Monad, and XRPL EVM.
+- **Real-Time Valuations**: Integrated with Pyth Hermes API for sub-second price updates.
+
+## 🛠️ Technology Stack
+- **Framework**: Next.js 16 (Turbopack)
+- **3D Engine**: Three.js / React Three Fiber
+- **XR**: @react-three/xr v6
+- **Styling**: Tailwind CSS 4
+- **Animation**: Framer Motion
+- **Wallet Core**: Custom BOLT substrate (ethers.js)
+
+## 📦 Getting Started
+
+### Installation
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Development
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Production Build
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📜 Distribution Guidelines
+- **Asset Optimization**: All logos and textures are optimized for WebGL.
+- **Security**: Never share your mnemonic or PIN. The vault is encrypted locally and never touches external servers.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+Built with ❤️ by the BOLT XR Team.
