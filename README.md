@@ -1,8 +1,8 @@
-# BOLT XR | Spatial Finance Wallet
-
-![BOLT XR Logo](./public/logo.png)
-
-**BOLT XR** is a premium, immersive Web3 wallet platform designed for the next generation of spatial computing (VR/AR/XR). Built with Next.js, Three.js, and @react-three/xr, BOLT provides a "handtracking-first" experience for managing assets across multiple chains including Ethereum, Tron, and XRPL EVM.
+<div align="center">
+  <img src="./public/0logov3.png" alt="BOLT XR Logo" width="120" />
+  <h1>BOLT XR | Spatial Finance Wallet</h1>
+  <p><strong>BOLT XR</strong> is a premium, immersive Web3 wallet platform designed for the next generation of spatial computing (VR/AR/XR).</p>
+</div>
 
 ## 🚀 Key Features
 

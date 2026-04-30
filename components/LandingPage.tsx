@@ -20,7 +20,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-8 py-6">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="BOLT Logo" className="h-10 w-10 object-contain" />
+          <img src="/0logov3.png" alt="BOLT Logo" className="h-10 w-10 object-contain" />
           <span className="text-2xl font-black tracking-tighter">BOLT <span className="text-purple-500">XR</span></span>
         </div>
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">

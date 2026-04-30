@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Bolt | XR Handtracking Wallet",
   description: "Next-gen Web3 Wallet for VR/AR/XR with Handtracking support.",
   icons: {
-    icon: "/logo.png",
+    icon: "/0logov3.png",
   },
 };
 

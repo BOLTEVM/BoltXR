@@ -9,7 +9,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ account, isLocked, onConnect }: DashboardProps) {
-    const logoTexture = useTexture('/logo.png');
+    const logoTexture = useTexture('/0logov3.png');
 
     return (
         <group>
