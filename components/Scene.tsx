@@ -10,6 +10,7 @@ import SwapScale from './SwapScale';
 import SecurityPinPad from './SecurityPinPad';
 import TokenRain from './TokenRain';
 import EnvironmentSelector, { EnvType } from './EnvironmentSelector';
+import SecureInfoPanel from './SecureInfoPanel';
 
 export default function Scene() {
     const { tokens, account, isLocked, isVaultSetup, unlock, setup, connect, send, swap, lockoutUntil } = useWallet();
@@ -24,6 +25,10 @@ export default function Scene() {
     const [showPinPad, setShowPinPad] = useState(false);
     const [pinPadAction, setPinPadAction] = useState<'unlock' | 'setup' | null>(null);
     const [pinError, setPinError] = useState("");
+    
+    // Secure Info State
+    const [showSecureInfo, setShowSecureInfo] = useState(false);
+    const [secureContent, setSecureContent] = useState("");
 
     const handleConnect = () => {
         if (isLocked) {
@@ -50,7 +55,8 @@ export default function Scene() {
         } else if (pinPadAction === 'setup') {
             const mnemonic = await setup(pin);
             if (mnemonic) {
-                alert("Vault Created! Save your mnemonic:\n" + mnemonic);
+                setSecureContent(mnemonic);
+                setShowSecureInfo(true);
                 setShowPinPad(false);
                 setPinPadAction(null);
             } else {
@@ -125,6 +131,17 @@ export default function Scene() {
                         lockoutUntil={lockoutUntil}
                         onConfirm={handlePinConfirm}
                         onCancel={() => { setShowPinPad(false); setPinPadAction(null); }}
+                    />
+                </group>
+            )}
+
+            {/* Secure Info Panel (Mnemonic display) */}
+            {showSecureInfo && (
+                <group position={[0, 1.5, -1]}>
+                    <SecureInfoPanel 
+                        title="NEW VAULT SEED"
+                        content={secureContent}
+                        onClose={() => setShowSecureInfo(false)}
                     />
                 </group>
             )}

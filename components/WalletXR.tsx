@@ -11,9 +11,21 @@ const store = createXRStore();
 export default function WalletXR() {
     const [mounted, setMounted] = useState(false);
     const [showLanding, setShowLanding] = useState(true);
+    const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
 
     useEffect(() => {
         setMounted(true);
+        
+        // Check WebXR support
+        if (typeof navigator !== 'undefined' && (navigator as any).xr) {
+            const xr = (navigator as any).xr;
+            Promise.all([
+                xr.isSessionSupported('immersive-vr'),
+                xr.isSessionSupported('immersive-ar')
+            ]).then(([vr, ar]) => {
+                setXrSupport({ vr, ar });
+            });
+        }
     }, []);
 
     if (!mounted) return null;
@@ -42,17 +54,28 @@ export default function WalletXR() {
                 <div className="flex gap-3">
                     <button
                         onClick={() => store.enterAR()}
-                        className="bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all active:scale-95 flex-1 border border-white/10"
+                        disabled={!xrSupport.ar}
+                        className={`font-bold py-3 px-4 rounded-xl text-sm transition-all active:scale-95 flex-1 border border-white/10 ${
+                            xrSupport.ar ? "bg-white/10 hover:bg-white/20 text-white" : "bg-white/5 text-gray-600 cursor-not-allowed"
+                        }`}
                     >
-                        AR
+                        {xrSupport.ar ? "AR" : "AR N/A"}
                     </button>
                     <button
                         onClick={() => store.enterVR()}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-purple-500/20 active:scale-95 flex-1"
+                        disabled={!xrSupport.vr}
+                        className={`font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg active:scale-95 flex-1 ${
+                            xrSupport.vr 
+                                ? "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20" 
+                                : "bg-purple-900/20 text-gray-600 cursor-not-allowed"
+                        }`}
                     >
-                        VR
+                        {xrSupport.vr ? "VR" : "VR N/A"}
                     </button>
                 </div>
+                {!xrSupport.vr && !xrSupport.ar && (
+                    <p className="text-[10px] text-red-400 text-center font-medium">WebXR not supported on this device/browser.</p>
+                )}
             </div>
 
             <Canvas shadows camera={{ position: [0, 1.6, 3], fov: 50 }}>

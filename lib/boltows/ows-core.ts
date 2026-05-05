@@ -16,7 +16,20 @@ if (typeof window !== 'undefined') {
 }
 
 const VAULT_KEY = 'bolt_vault_v1';
-let activeChainId = 'ethereum';
+const providerCache: Record<string, ethers.JsonRpcProvider> = {};
+
+const getProvider = (rpcUrl: string) => {
+  if (!rpcUrl) return null;
+  if (!providerCache[rpcUrl]) {
+    try {
+      providerCache[rpcUrl] = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+    } catch (e) {
+      console.error("Provider Initialization Error:", e);
+      return null;
+    }
+  }
+  return providerCache[rpcUrl];
+};
 
 export interface ContractData {
   address: string;
@@ -116,9 +129,9 @@ let sessionMnemonic: string | null = null;
 export class BoltwalletCore {
   private chainId: string = 'ethereum';
 
-  async getWallets() { return listWallets(); }
-  async listWallets() { return listWallets(); } // Consistency for multi-UI support
-  async createNewWallet(name: string) { return createWallet(name); }
+  async getWallets() { return listWallets(this.chainId); }
+  async listWallets() { return listWallets(this.chainId); } // Consistency for multi-UI support
+  async createNewWallet(name: string) { return createWallet(name, this.chainId); }
   async isVaultLocked() { return isVaultLocked(); }
   async unlockVault(password: string) { return unlockVault(password); }
   async isVaultSetup() { return isVaultSetup(); }
@@ -155,13 +168,12 @@ export class BoltwalletCore {
   async resetVault(mnemonic: string, pass: string) { return resetVault(mnemonic, pass); }
   async getSession() { return getSessionMnemonic(); }
 
-  setChain(chainId: string) {
-    this.chainId = chainId;
-    setActiveChain(chainId);
-  }
-
   onLogs(cb: any) { return onLogs(cb); }
   getLogs() { return getLogs(); }
+
+  setActiveChain(chainId: string) {
+    this.chainId = chainId;
+  }
 
   async getSwapQuote(fromAsset: string, toAsset: string, amount: string): Promise<any> {
     // Mocking a swap quote logic
@@ -374,26 +386,12 @@ export const onLogs = (callback: (l: LogEvent[]) => void) => {
 
 export const getLogs = () => logs;
 
-export const setActiveChain = (chainId: string) => {
-  activeChainId = chainId;
-};
-
-export const deriveAddress = (mnemonic: string, index: number): string => {
+export const deriveAddress = (mnemonic: string, index: number, chainId: string = 'ethereum'): string => {
   if (!mnemonic || mnemonic.trim() === "") {
     return "0x0000000000000000000000000000000000000000";
   }
 
-  if (activeChainId === 'bitcoin') {
-    const idHash = ethers.id(`${mnemonic}-${index}-btc`);
-    const hash = (idHash || '0x00000000').substring(2, 42);
-    return `bc1q${hash}`;
-  }
-
-  if (activeChainId === 'sui') {
-    return ethers.id(`${mnemonic}-${index}-sui`);
-  }
-
-  const basePath = DERIVATION_PATHS[activeChainId] || "m/44'/60'/0'/0/";
+  const basePath = DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/";
   const fullPath = basePath.endsWith('/') ? `${basePath}${index}` : `${basePath}/${index}`;
 
   try {
@@ -406,13 +404,13 @@ export const deriveAddress = (mnemonic: string, index: number): string => {
   }
 };
 
-export const createWallet = async (name: string): Promise<any> => {
+export const createWallet = async (name: string, chainId: string = 'ethereum'): Promise<any> => {
   if (!sessionMnemonic) throw new Error("Vault is locked");
   const vault = await getVault();
   const index = vault.wallets.length;
   const randStr = Math.random().toString(16);
   const id = `wallet_${(randStr + '00000000').substring(2, 10)}`;
-  const address = deriveAddress(sessionMnemonic, index);
+  const address = deriveAddress(sessionMnemonic, index, chainId);
 
   const newWallet = {
     id,
@@ -428,17 +426,17 @@ export const createWallet = async (name: string): Promise<any> => {
     id: newWallet.id,
     name: newWallet.name,
     address,
-    accounts: [{ chainId: "ethereum", address, derivationPath: `m/44'/60'/0'/0/${index}` }],
+    accounts: [{ chainId, address, derivationPath: (DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/") + index }],
     createdAt: newWallet.createdAt
   };
 };
 
-export const listWallets = async (): Promise<any[]> => {
+export const listWallets = async (chainId: string = 'ethereum'): Promise<any[]> => {
   const vault = await getVault();
   return vault.wallets.map((w: any) => {
     let address = '0x0000000000000000000000000000000000000000';
     if (sessionMnemonic) {
-      address = deriveAddress(sessionMnemonic, w.index);
+      address = deriveAddress(sessionMnemonic, w.index, chainId);
     }
 
     return {
@@ -446,59 +444,78 @@ export const listWallets = async (): Promise<any[]> => {
       name: w.name,
       address,
       accounts: [{
-        chainId: "ethereum",
+        chainId,
         address,
-        derivationPath: `m/44'/60'/0'/0/${w.index}`
+        derivationPath: (DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/") + w.index
       }],
       createdAt: w.createdAt
     };
   });
 };
 
-export const signTransaction = async (walletId: string, chain: string, txHex: string): Promise<any> => {
-  logEvent('security', `Signing transaction for ${chain}...`, 'info');
+export const signTransaction = async (walletId: string, chainId: string, txHex: string): Promise<any> => {
+  if (!sessionMnemonic) throw new Error("Vault is locked");
+  logEvent('security', `Signing transaction for ${chainId}...`, 'info');
+  
   const vault = await getVault();
   const w = vault.wallets.find((x: any) => x.id === walletId || x.name === walletId);
   if (!w) throw new Error("Wallet not found");
 
   try {
-    const tx = JSON.parse(txHex);
-    validateTransactionPayload(tx);
+    const txParams = JSON.parse(txHex);
+    validateTransactionPayload(txParams);
+
+    const basePath = DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/";
+    const fullPath = basePath.endsWith('/') ? `${basePath}${w.index}` : `${basePath}/${w.index}`;
+    
+    const wordlist = (wordlists as any).en || LangEn.wordlist();
+    const hdNode = ethers.HDNodeWallet.fromPhrase(sessionMnemonic, undefined, fullPath, wordlist);
+    const wallet = new ethers.Wallet(hdNode.privateKey);
+
+    const chainConfig = CHAINS[chainId as keyof typeof CHAINS];
+    
+    // Perform actual signing
+    const signature = await wallet.signTransaction({
+      to: txParams.to,
+      value: txParams.value ? ethers.parseEther(txParams.value.toString()) : 0n,
+      data: txParams.data || '0x',
+      nonce: txParams.nonce || 0,
+      gasLimit: txParams.gasLimit || 21000n,
+      gasPrice: txParams.gasPrice || ethers.parseUnits('1', 'gwei'),
+      chainId: Number(chainConfig?.id || 1)
+    });
+
+    const from = hdNode.address;
+    const newHistory: HistoryData = {
+      hash: ethers.keccak256(signature),
+      type: txParams.data && txParams.to === '0x' ? 'contract_call' : 'send',
+      from,
+      to: txParams.to,
+      value: txParams.value || '0',
+      asset: chainConfig?.nativeCurrency.symbol || 'ETH',
+      usdValue: '0.00',
+      timestamp: new Date().toISOString(),
+      chainId: chainId,
+      status: 'success'
+    };
+
+    vault.history = [newHistory, ...(vault.history || [])];
+    await saveVault(vault);
+
+    logEvent('security', `Transaction signed successfully`, 'success');
+    return { signature };
   } catch (e: any) {
-    console.error("Security Alert: Invalid Transaction Payload Detected", e);
-    throw new Error(`Security Violation: ${e.message}`);
+    logEvent('security', `Signing Violation: ${e.message}`, 'error');
+    throw new Error(`Signing Violation: ${e.message}`);
   }
-
-  const sig = `0x_mock_signed_tx_${walletId}_${Math.random().toString(16).substring(2, 10)}`;
-
-  const parsedTx = JSON.parse(txHex);
-  const from = deriveAddress(sessionMnemonic || '', w.index);
-  const newHistory: HistoryData = {
-    hash: sig,
-    type: parsedTx.data && parsedTx.to === '0x' ? 'contract_call' : 'send',
-    from,
-    to: parsedTx.to,
-    value: parsedTx.value || '0',
-    asset: chain === 'ethereum' ? 'ETH' : chain.toUpperCase(),
-    usdValue: '0.00',
-    timestamp: new Date().toISOString(),
-    chainId: chain,
-    status: 'success'
-  };
-
-  vault.history = [newHistory, ...(vault.history || [])];
-  await saveVault(vault);
-
-  logEvent('security', `Transaction signed successfully: ${sig.substring(0, 10)}...`, 'success');
-  return { signature: sig };
 };
 
 export const getNativeBalance = async (address: string, rpcUrl: string): Promise<string> => {
   if (!address || typeof address !== 'string') return "0.00";
-  if (!rpcUrl || typeof rpcUrl !== 'string') return "0.00";
+  const provider = getProvider(rpcUrl);
+  if (!provider) return "0.00";
 
   try {
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const balance = await provider.getBalance(address);
     return ethers.formatEther(balance);
   } catch (e: any) {
@@ -508,8 +525,10 @@ export const getNativeBalance = async (address: string, rpcUrl: string): Promise
 };
 
 export const getGasPriceEstimates = async (rpcUrl: string) => {
+  const provider = getProvider(rpcUrl);
+  if (!provider) return { baseFee: '20', slow: { priorityFee: '1', maxFee: '21', speed: 'slow' }, average: { priorityFee: '2', maxFee: '25', speed: 'average' }, fast: { priorityFee: '5', maxFee: '35', speed: 'fast' } };
+
   try {
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const feeData = await provider.getFeeData();
     const baseFee = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
 
@@ -542,8 +561,10 @@ export const getGasPriceEstimates = async (rpcUrl: string) => {
 };
 
 export const getContractBalance = async (contractAddress: string, walletAddress: string, decimals: number, rpcUrl: string): Promise<string> => {
+  const provider = getProvider(rpcUrl);
+  if (!provider) return "0.00";
+
   try {
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const abi = ["function balanceOf(address) view returns (uint256)"];
     const contract = new ethers.Contract(contractAddress, abi, provider);
     const balance = await contract.balanceOf(walletAddress);

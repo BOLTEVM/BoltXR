@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, Float, RoundedBox } from '@react-three/drei';
 import { Interactive } from '@react-three/xr';
@@ -77,9 +77,9 @@ export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SEC
   });
 
   // Trigger shake on error change
-  useState(() => {
+  useEffect(() => {
     if (error) shakeRef.current = 1;
-  });
+  }, [error]);
 
   const handleSelect = (val: string) => {
     if (isLockedOut) return;
