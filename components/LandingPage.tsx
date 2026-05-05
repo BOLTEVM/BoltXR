@@ -66,8 +66,11 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               >
                 ENTER VR EXPERIENCE <ArrowRight className="h-5 w-5" />
               </button>
-              <button className="px-8 py-4 rounded-2xl glass font-bold flex items-center gap-2 hover:bg-white/10 transition-all active:scale-95 text-gray-300">
-                <Download className="h-5 w-5" /> DOWNLOAD CLIENT
+              <button 
+                onClick={() => window.open('https://github.com/BOLTEVM/BoltXR/releases/latest', '_blank')}
+                className="px-8 py-4 rounded-2xl glass font-bold flex items-center gap-2 hover:bg-white/10 transition-all active:scale-95 text-gray-300"
+              >
+                <Download className="h-5 w-5" /> DOWNLOAD WINDOWS (.EXE)
               </button>
             </div>
           </motion.div>
