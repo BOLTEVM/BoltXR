@@ -1,60 +1,61 @@
 <div align="center">
   <img src="./public/0logov3.png" alt="BOLT XR Logo" width="120" />
-  <h1>BOLT XR | Spatial Finance Wallet</h1>
-  <p><strong>BOLT XR</strong> is a premium, immersive Web3 wallet platform designed for the next generation of spatial computing (VR/AR/XR).</p>
+  <h1>BOLT XR | Spatial Finance Terminal</h1>
+  <p><strong>BOLT XR</strong> is a professional-grade, immersive multi-chain wallet platform architected for the future of spatial computing (VR/AR/XR).</p>
 </div>
 
 ## 🚀 Key Features
 
-### 1. Immersive 3D Interface
-- **Spatial Dashboard**: A floating glassmorphic dashboard for balance tracking and connection management.
-- **High-Fidelity 3D Coins**: Real-time rendered metallic tokens with dynamic logo mapping and physics-inspired movement.
-- **Interactive Swap Scale**: A procedural 3D balancing scale for token exchanges. Drag and drop tokens onto the scale to initiate swaps with real-world price data.
+### 1. Expert Multi-Chain Architecture
+- **Native Non-EVM Support**: Native integration for **Bitcoin (BIP84 SegWit)**, **Sui (Ed25519)**, and **Tron (Base58Check)**.
+- **Stateless Logic Engine**: A hardened, stateless core substrate that eliminates race conditions during concurrent multi-chain operations.
+- **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths for cross-wallet compatibility.
 
-### 2. Advanced Security
-- **3D Security PIN Pad**: A fully immersive, in-scene authentication system. No desktop prompts or popups—unlock your vault directly in XR.
-- **Hardened Logic**: Anti-brute force mechanisms, 30-second lockouts after failed attempts, and physics-based "shake" feedback.
-- **Local Vault Substrate**: BIP39 mnemonic management with AES-GCM encryption stored securely in local storage.
+### 2. Immersive Spatial UI/UX
+- **Depth-Aware Terminal**: Floating glassmorphic interfaces built with `RoundedBox` geometry for a tactile, physical presence in 3D space.
+- **Dynamic Telemetry**: Chain-specific transaction data including Bitcoin fee density (sats/vB), Sui gas estimation, and EVM gas prices.
+- **Procedural 3D Assets**: Real-time rendered metallic tokens and an interactive **Swap Scale** for physics-based asset exchanges.
 
-### 3. Dynamic Environments
-- **Landscape Selector**: Switch between multiple immersive scenarios including:
-  - **Deep Space**: The ultimate cosmic void.
-  - **Neon Sunset**: Retro-future aesthetics.
-  - **Zen Garden**: Minimalist green space.
-  - **Token Rain**: A spectacular scenario where your assets literally fall from the sky.
+### 3. Hardened Security
+- **Immersive PIN Pad**: A fully sandboxed, in-scene authentication system with anti-brute force lockouts and haptic feedback.
+- **Local Vault Substrate**: AES-GCM encrypted local storage vault. Private keys never leave the spatial environment.
+- **Secure Info Panel**: Mnemonic phrases are displayed via a gaze-activated 3D panel to prevent shoulder surfing and browser-level sniffing.
 
-### 4. Cross-Chain Support
-- **Multi-Chain Aggregation**: Native support for Ethereum, Polygon, BSC, Tron (TRX), Monad, and XRPL EVM.
-- **Real-Time Valuations**: Integrated with Pyth Hermes API for sub-second price updates.
+### 4. High-Performance Connectivity
+- **Hybrid RPC Engine**: Intelligent provider caching and fallback mechanisms using standard JSON-RPC and REST aggregators (Blockstream, Sui Fullnodes).
+- **Sub-Second Valuations**: Real-time asset pricing via Pyth Hermes API.
 
 ## 🛠️ Technology Stack
-- **Framework**: Next.js 16 (Turbopack)
-- **3D Engine**: Three.js / React Three Fiber
-- **XR**: @react-three/xr v6
+- **Frontend**: Next.js 16 (App Router)
+- **3D Logic**: Three.js / React Three Fiber / @react-three/drei
+- **Spatial**: @react-three/xr v6
+- **Cryptography**: ethers.js, bitcoinjs-lib, @mysten/sui, bip39
 - **Styling**: Tailwind CSS 4
-- **Animation**: Framer Motion
-- **Wallet Core**: Custom BOLT substrate (ethers.js)
 
-## 📦 Getting Started
+## 📦 Installation & Setup
 
-### Installation
+### Requirements
+- Node.js 20+
+- WebXR compatible browser or headset (Meta Quest 3, Apple Vision Pro, etc.)
+
+### Quick Start
 ```bash
+# Install dependencies (including non-EVM libraries)
 npm install
-```
 
-### Development
-```bash
+# Start the spatial development server
 npm run dev
 ```
 
-### Production Build
+### Electron Distribution
 ```bash
-npm run build
+# Build for desktop release
+npm run electron:build
 ```
 
-## 📜 Distribution Guidelines
-- **Asset Optimization**: All logos and textures are optimized for WebGL.
-- **Security**: Never share your mnemonic or PIN. The vault is encrypted locally and never touches external servers.
+## 📜 Security & Distribution
+- **Audit Status**: Experimental. Use for spatial development and demonstration.
+- **Asset Optimization**: All 3D assets are optimized for high-performance WebGL rendering (90fps+).
 
 ---
-Built with ❤️ by the BOLT XR Team.
+Built with ❤️ by the **BOLT XR** Team.

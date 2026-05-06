@@ -24,6 +24,11 @@
     "win": {
       "target": "portable",
       "icon": "public/0logov3.png"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "BOLTEVM",
+      "repo": "BoltXR"
     }
   },
   "dependencies": {
@@ -31,15 +36,23 @@
     "@react-three/fiber": "^9.4.2",
     "@react-three/xr": "^6.6.28",
     "@types/three": "^0.170.0",
+    "bip39": "^3.1.0",
+    "buffer": "^6.0.3",
     "ethers": "^6.16.0",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.562.0",
     "next": "16.1.0",
+    "process": "^0.11.10",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "sass": "^1.97.0",
     "thirdweb": "^5.116.1",
-    "three": "^0.170.0"
+    "three": "^0.170.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "bip32": "^4.0.0",
+    "tiny-secp256k1": "^2.2.3",
+    "@mysten/sui": "^2.16.0",
+    "tronweb": "^6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

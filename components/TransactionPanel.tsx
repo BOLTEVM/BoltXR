@@ -1,11 +1,21 @@
 'use client';
 
+import { useState, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { Text, RoundedBox, Float } from '@react-three/drei';
 import { Interactive } from '@react-three/xr';
-import { Text } from '@react-three/drei';
-import { useState } from 'react';
+import { Group } from 'three';
 
 interface TransactionPanelProps {
-    token: any;
+    token: {
+        symbol: string;
+        name: string;
+        balance: string;
+        address: string;
+        network: string;
+        color: string;
+        chainId: string;
+    };
     onClose: () => void;
     onSend: (to: string, amount: string, symbol: string) => Promise<boolean>;
     onSwap: (from: string, to: string, amount: string) => Promise<boolean>;
@@ -16,17 +26,16 @@ function Button3D({ label, onClick, position, color = "#444" }: { label: string,
     return (
         <Interactive onSelect={onClick} onHover={() => setHovered(true)} onBlur={() => setHovered(false)}>
             <group position={position}>
-                <mesh scale={hovered ? 1.05 : 1}>
-                    <planeGeometry args={[0.8, 0.25]} />
+                <RoundedBox args={[0.8, 0.25, 0.05]} radius={0.05} smoothness={4} scale={hovered ? 1.05 : 1}>
                     <meshStandardMaterial
                         color={hovered ? "#fff" : color}
                         emissive={hovered ? "#fff" : color}
-                        emissiveIntensity={hovered ? 0.2 : 0}
-                        transparent
-                        opacity={0.9}
+                        emissiveIntensity={hovered ? 0.5 : 0.2}
+                        metalness={0.8}
+                        roughness={0.2}
                     />
-                </mesh>
-                <Text position={[0, 0, 0.01]} fontSize={0.08} color={hovered ? "black" : "white"} anchorX="center" anchorY="middle">
+                </RoundedBox>
+                <Text position={[0, 0, 0.04]} fontSize={0.06} color={hovered ? "black" : "white"} anchorX="center" anchorY="middle">
                     {label}
                 </Text>
             </group>
@@ -36,65 +45,114 @@ function Button3D({ label, onClick, position, color = "#444" }: { label: string,
 
 export default function TransactionPanel({ token, onClose, onSend, onSwap }: TransactionPanelProps) {
     const [status, setStatus] = useState<string>("");
+    
+    const truncatedAddress = useMemo(() => {
+        if (!token.address) return "";
+        return `${token.address.substring(0, 8)}...${token.address.substring(token.address.length - 6)}`;
+    }, [token.address]);
+
+    const feeInfo = useMemo(() => {
+        if (token.symbol === 'BTC') return "~45 sats/vB";
+        if (token.symbol === 'SUI') return "~0.002 SUI";
+        return "~12 Gwei";
+    }, [token.symbol]);
 
     const handleSend = async () => {
-        setStatus("Processing Send...");
-        await onSend("0x123...", "10", token.symbol);
-        setStatus("Transaction Confirmed!");
-        setTimeout(() => setStatus(""), 3000);
+        setStatus("PREPARING SIGNATURE...");
+        const dest = token.symbol === 'BTC' ? "bc1qxy2kg..." : "0x742d35Cc...";
+        const success = await onSend(dest, "0.01", token.symbol);
+        if (success) {
+            setStatus("TRANSACTION BROADCAST!");
+        } else {
+            setStatus("SIGNING FAILED");
+        }
+        setTimeout(() => setStatus(""), 4000);
     };
 
     const handleSwap = async () => {
-        setStatus("Processing Swap...");
-        await onSwap(token.symbol, "USDC", "10");
-        setStatus("Swap Successful!");
-        setTimeout(() => setStatus(""), 3000);
+        setStatus("PREPARING SWAP...");
+        const success = await onSwap(token.symbol, "USDC", "1.0");
+        if (success) {
+            setStatus("SWAP COMPLETE!");
+        } else {
+            setStatus("SWAP FAILED");
+        }
+        setTimeout(() => setStatus(""), 4000);
     };
 
     return (
         <group>
-            {/* Glass Background */}
-            <mesh>
-                <planeGeometry args={[1.5, 2]} />
-                <meshStandardMaterial color="#000" transparent opacity={0.8} />
-            </mesh>
-            <mesh position={[0, 0, -0.01]}>
-                <planeGeometry args={[1.52, 2.02]} />
-                <meshStandardMaterial color={token.color} transparent opacity={0.3} />
-            </mesh>
+            <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
+                {/* Immersive Glass Background */}
+                <RoundedBox args={[1.5, 2.2, 0.1]} radius={0.1} smoothness={4}>
+                    <meshStandardMaterial 
+                        color="#0f172a" 
+                        transparent 
+                        opacity={0.85} 
+                        metalness={0.9} 
+                        roughness={0.1} 
+                    />
+                </RoundedBox>
+                <RoundedBox args={[1.52, 2.22, 0.05]} radius={0.1} smoothness={4} position={[0, 0, -0.05]}>
+                    <meshStandardMaterial color={token.color} transparent opacity={0.4} emissive={token.color} emissiveIntensity={0.5} />
+                </RoundedBox>
 
-            {/* Header */}
-            <Text position={[0, 0.8, 0.02]} fontSize={0.16} color="white" anchorX="center">
-                {token.name}
-            </Text>
-
-            <mesh position={[0, 0.65, 0.01]}>
-                <planeGeometry args={[0.5, 0.01]} />
-                <meshStandardMaterial color={token.color} />
-            </mesh>
-
-            <Text position={[0, 0.5, 0.02]} fontSize={0.1} color="#aaa" anchorX="center">
-                {token.network} Network
-            </Text>
-
-            <Text position={[0, 0.2, 0.02]} fontSize={0.12} color="white" anchorX="center">
-                Balance: {token.balance} {token.symbol}
-            </Text>
-
-            {/* Actions */}
-            <group position={[0, -0.2, 0]}>
-                <Button3D label={`Send 10 ${token.symbol}`} position={[0, 0.15, 0.02]} onClick={handleSend} color="#3b82f6" />
-                <Button3D label="Swap to USDC" position={[0, -0.15, 0.02]} onClick={handleSwap} color="#8b5cf6" />
-            </group>
-
-            <Button3D label="Close Panel" position={[0, -0.7, 0.02]} onClick={onClose} color="#ef4444" />
-
-            {/* Status Indicator */}
-            {status && (
-                <Text position={[0, -0.5, 0.02]} fontSize={0.08} color="#10b981" anchorX="center">
-                    {status}
+                {/* Header Section */}
+                <Text position={[0, 0.9, 0.06]} fontSize={0.14} color="white" anchorX="center">
+                    {token.name.toUpperCase()}
                 </Text>
-            )}
+
+                <mesh position={[0, 0.75, 0.06]}>
+                    <planeGeometry args={[0.6, 0.005]} />
+                    <meshStandardMaterial color={token.color} emissive={token.color} emissiveIntensity={1} />
+                </mesh>
+
+                <Text position={[0, 0.6, 0.06]} fontSize={0.06} color="#94a3b8" anchorX="center">
+                    {token.network.toUpperCase()} PROTOCOL
+                </Text>
+
+                {/* Wallet Info Card */}
+                <group position={[0, 0.35, 0.06]}>
+                    <RoundedBox args={[1.2, 0.3, 0.02]} radius={0.05}>
+                        <meshStandardMaterial color="#1e293b" metalness={0.8} />
+                    </RoundedBox>
+                    <Text position={[-0.5, 0.05, 0.02]} fontSize={0.04} color="#64748b" anchorX="left">
+                        YOUR ADDRESS
+                    </Text>
+                    <Text position={[-0.5, -0.05, 0.02]} fontSize={0.05} color="#cbd5e1" anchorX="left">
+                        {truncatedAddress}
+                    </Text>
+                </group>
+
+                <group position={[0, -0.05, 0.06]}>
+                    <Text fontSize={0.06} color="#64748b" position={[0, 0.12, 0]} anchorX="center">
+                        AVAILABLE ASSETS
+                    </Text>
+                    <Text fontSize={0.18} color="white" anchorX="center">
+                        {token.balance} <Text fontSize={0.1} color={token.color} position={[0.2, 0, 0]}>{token.symbol}</Text>
+                    </Text>
+                    <Text fontSize={0.04} color="#10b981" position={[0, -0.12, 0]} anchorX="center">
+                        EST. FEE: {feeInfo}
+                    </Text>
+                </group>
+
+                {/* Interactive Actions */}
+                <group position={[0, -0.5, 0.06]}>
+                    <Button3D label={`SEND ${token.symbol}`} position={[0, 0.15, 0]} onClick={handleSend} color="#3b82f6" />
+                    <Button3D label="INSTANT SWAP" position={[0, -0.15, 0]} onClick={handleSwap} color="#8b5cf6" />
+                </group>
+
+                <Button3D label="DISMISS" position={[0, -0.9, 0.06]} onClick={onClose} color="#334155" />
+
+                {/* Animated Status Bar */}
+                {status && (
+                    <group position={[0, -0.7, 0.08]}>
+                        <Text fontSize={0.05} color="#10b981" anchorX="center">
+                            {status}
+                        </Text>
+                    </group>
+                )}
+            </Float>
         </group>
     );
 }

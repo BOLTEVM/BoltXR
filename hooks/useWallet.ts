@@ -36,7 +36,7 @@ export function useWallet() {
             setIsLocked(locked);
 
             if (!locked) {
-                const w = await core.getWallets();
+                const w = await core.getWallets('ethereum');
                 setWallets(w);
                 if (w.length > 0) setActiveWallet(w[0]);
             }
@@ -59,8 +59,7 @@ export function useWallet() {
             if (!config) return null as any;
 
             try {
-                core.setChain(chainKey);
-                const balance = await core.getNativeBalance(activeWallet.address);
+                const balance = await core.getNativeBalance(activeWallet.address, chainKey);
                 
                 return {
                     symbol: config.nativeCurrency.symbol,
@@ -113,7 +112,7 @@ export function useWallet() {
             setIsLocked(false);
             setFailedAttempts(0);
             setLockoutUntil(null);
-            const w = await core.getWallets();
+            const w = await core.getWallets('ethereum');
             setWallets(w);
             if (w.length > 0) setActiveWallet(w[0]);
             return true;
@@ -134,7 +133,7 @@ export function useWallet() {
         if (mnemonic) {
             setIsLocked(false);
             setIsVaultSetup(true);
-            const w = await core.createNewWallet("Main Wallet");
+            const w = await core.createNewWallet("Main Wallet", "ethereum");
             setWallets([w]);
             setActiveWallet(w);
             return mnemonic;
@@ -145,20 +144,16 @@ export function useWallet() {
     const send = async (to: string, amount: string, symbol: string) => {
         if (!activeWallet) return false;
         try {
-            const token = tokens.find(t => t.symbol === symbol);
-            if (!token) return false;
-
             // Find chain key by symbol or name
             const chainKey = Object.keys(CHAINS).find(key => CHAINS[key].nativeCurrency.symbol === symbol) || 'ethereum';
-            core.setChain(chainKey);
-
+            
             const tx = {
                 to,
                 value: amount,
                 data: '0x'
             };
 
-            await core.signTransaction(activeWallet.id, tx);
+            await core.signTransaction(activeWallet.id, chainKey, tx);
             // In a real app, we would broadcast here. BoltwalletCore.signTransaction simulated this.
             return true;
         } catch (e) {
@@ -170,8 +165,15 @@ export function useWallet() {
     const swap = async (fromToken: string, toToken: string, amount: string) => {
         if (!activeWallet) return false;
         try {
-            await core.getSwapQuote(fromToken, toToken, amount);
-            await core.executeSwap(activeWallet.id, { fromAsset: fromToken, toAsset: toToken, fromAmount: amount });
+            const fromTokenObj = tokens.find(t => t.symbol === fromToken);
+            const targetTokenObj = tokens.find(t => t.symbol === toToken);
+            if (!fromTokenObj || !targetTokenObj) return false;
+
+            const fromChainKey = Object.keys(CHAINS).find(key => CHAINS[key].id === fromTokenObj.chainId) || 'ethereum';
+            const toChainKey = Object.keys(CHAINS).find(key => CHAINS[key].id === targetTokenObj.chainId) || 'ethereum';
+
+            const quote = await core.getSwapQuote(fromToken, toToken, amount, fromChainKey, toChainKey, activeWallet.address);
+            await core.executeSwap(activeWallet.id, fromChainKey, quote);
             return true;
         } catch (e) {
             console.error(e);
@@ -182,6 +184,7 @@ export function useWallet() {
     return {
         account: activeWallet?.address || null,
         tokens,
+        activeNetwork: activeWallet ? CHAINS['ethereum'].name : null, // Fallback or logic to get current network
         isLocked,
         isVaultSetup,
         unlock,
