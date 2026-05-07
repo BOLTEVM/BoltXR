@@ -7,14 +7,14 @@
 ## 🚀 Key Features
 
 ### 1. Advanced Liquidity & Bridging
-- **Expert Aggregation**: Integrated **LI.FI** for cross-chain bridge aggregation and **1inch** for optimal same-chain DEX routing.
-- **Native Native Swaps**: Support for decentralized native asset exchanges (e.g., native BTC to native ETH) powered by **Thorchain**.
+- **Expert Aggregation**: Integrated **LI.FI SDK v3** for cross-chain bridge aggregation and **1inch v6** for optimal same-chain DEX routing.
+- **Native Native Swaps**: Support for decentralized native asset exchanges (e.g., native BTC to native ETH) powered by **Thorchain** and **XChainJS**.
 - **Route Telemetry**: Real-time spatial tracking of transaction routes, estimated bridging times, and liquidity sources directly in the XR terminal.
 
 ### 2. Expert Multi-Chain Architecture
 - **Native Non-EVM Support**: Full integration for **Bitcoin (BIP84 SegWit)**, **Sui (Ed25519)**, and **Tron (Base58Check)**.
 - **Stateless Logic Engine**: A hardened, stateless core substrate that eliminates race conditions during concurrent multi-chain operations.
-- **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths.
+- **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths across 7+ primary chains.
 
 ### 3. Immersive Spatial UI/UX
 - **Depth-Aware Terminal**: Floating glassmorphic interfaces built with `RoundedBox` geometry for a tactile physical presence.
@@ -30,18 +30,18 @@
 - **3D Logic**: Three.js / React Three Fiber / @react-three/drei
 - **Spatial**: @react-three/xr v6
 - **Liquidity**: LI.FI, 1inch, Thorchain
-- **Cryptography**: ethers.js, bitcoinjs-lib, @mysten/sui, xchainjs, bip39
+- **Cryptography**: ethers.js v6, bitcoinjs-lib v7, @mysten/sui, @xchainjs/xchain-thorchain-query, bip39
 
 ## 📦 Installation & Setup
 
 ### Requirements
 - Node.js 20+
-- WebXR compatible browser or headset (Meta Quest 3, Apple Vision Pro, etc.)
+- **pnpm** (Recommended for dependency resolution)
 
 ### Quick Start
 ```bash
-# Install dependencies (EVM + Non-EVM + Bridges)
-npm install
+# Install dependencies using pnpm (handles complex peer deps for xchainjs)
+pnpm install
 
 # Start the spatial development server
 npm run dev
