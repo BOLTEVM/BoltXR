@@ -6,31 +6,31 @@
 
 ## 🚀 Key Features
 
-### 1. Expert Multi-Chain Architecture
-- **Native Non-EVM Support**: Native integration for **Bitcoin (BIP84 SegWit)**, **Sui (Ed25519)**, and **Tron (Base58Check)**.
+### 1. Advanced Liquidity & Bridging
+- **Expert Aggregation**: Integrated **LI.FI** for cross-chain bridge aggregation and **1inch** for optimal same-chain DEX routing.
+- **Native Native Swaps**: Support for decentralized native asset exchanges (e.g., native BTC to native ETH) powered by **Thorchain**.
+- **Route Telemetry**: Real-time spatial tracking of transaction routes, estimated bridging times, and liquidity sources directly in the XR terminal.
+
+### 2. Expert Multi-Chain Architecture
+- **Native Non-EVM Support**: Full integration for **Bitcoin (BIP84 SegWit)**, **Sui (Ed25519)**, and **Tron (Base58Check)**.
 - **Stateless Logic Engine**: A hardened, stateless core substrate that eliminates race conditions during concurrent multi-chain operations.
-- **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths for cross-wallet compatibility.
+- **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths.
 
-### 2. Immersive Spatial UI/UX
-- **Depth-Aware Terminal**: Floating glassmorphic interfaces built with `RoundedBox` geometry for a tactile, physical presence in 3D space.
-- **Dynamic Telemetry**: Chain-specific transaction data including Bitcoin fee density (sats/vB), Sui gas estimation, and EVM gas prices.
-- **Procedural 3D Assets**: Real-time rendered metallic tokens and an interactive **Swap Scale** for physics-based asset exchanges.
+### 3. Immersive Spatial UI/UX
+- **Depth-Aware Terminal**: Floating glassmorphic interfaces built with `RoundedBox` geometry for a tactile physical presence.
+- **Interactive Swap Scale**: A procedural 3D balancing scale with real-time physics and route visualization.
+- **Dynamic Telemetry**: Chain-specific transaction data including Bitcoin fee density (sats/vB) and Sui gas estimation.
 
-### 3. Hardened Security
-- **Immersive PIN Pad**: A fully sandboxed, in-scene authentication system with anti-brute force lockouts and haptic feedback.
+### 4. Hardened Security
+- **Immersive PIN Pad**: Fully sandboxed, in-scene authentication system with anti-brute force lockouts.
 - **Local Vault Substrate**: AES-GCM encrypted local storage vault. Private keys never leave the spatial environment.
-- **Secure Info Panel**: Mnemonic phrases are displayed via a gaze-activated 3D panel to prevent shoulder surfing and browser-level sniffing.
-
-### 4. High-Performance Connectivity
-- **Hybrid RPC Engine**: Intelligent provider caching and fallback mechanisms using standard JSON-RPC and REST aggregators (Blockstream, Sui Fullnodes).
-- **Sub-Second Valuations**: Real-time asset pricing via Pyth Hermes API.
 
 ## 🛠️ Technology Stack
 - **Frontend**: Next.js 16 (App Router)
 - **3D Logic**: Three.js / React Three Fiber / @react-three/drei
 - **Spatial**: @react-three/xr v6
-- **Cryptography**: ethers.js, bitcoinjs-lib, @mysten/sui, bip39
-- **Styling**: Tailwind CSS 4
+- **Liquidity**: LI.FI, 1inch, Thorchain
+- **Cryptography**: ethers.js, bitcoinjs-lib, @mysten/sui, xchainjs, bip39
 
 ## 📦 Installation & Setup
 
@@ -40,7 +40,7 @@
 
 ### Quick Start
 ```bash
-# Install dependencies (including non-EVM libraries)
+# Install dependencies (EVM + Non-EVM + Bridges)
 npm install
 
 # Start the spatial development server
@@ -52,10 +52,6 @@ npm run dev
 # Build for desktop release
 npm run electron:build
 ```
-
-## 📜 Security & Distribution
-- **Audit Status**: Experimental. Use for spatial development and demonstration.
-- **Asset Optimization**: All 3D assets are optimized for high-performance WebGL rendering (90fps+).
 
 ---
 Built with ❤️ by the **BOLT XR** Team.

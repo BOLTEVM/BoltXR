@@ -32,11 +32,22 @@
     }
   },
   "dependencies": {
+    "@lifi/sdk": "^3.1.0",
+    "@lifi/types": "^1.5.0",
+    "@mysten/sui": "^2.16.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "@react-three/xr": "^6.6.28",
     "@types/three": "^0.170.0",
+    "@xchainjs/xchain-client": "^2.0.12",
+    "@xchainjs/xchain-midgard-query": "^2.0.15",
+    "@xchainjs/xchain-thorchain-query": "^0.1.0",
+    "@xchainjs/xchain-thornode": "^1.1.1",
+    "@xchainjs/xchain-util": "^0.13.0",
+    "axios": "^1.16.0",
+    "bip32": "^4.0.0",
     "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^6.1.5",
     "buffer": "^6.0.3",
     "ethers": "^6.16.0",
     "framer-motion": "^12.23.26",
@@ -48,10 +59,7 @@
     "sass": "^1.97.0",
     "thirdweb": "^5.116.1",
     "three": "^0.170.0",
-    "bitcoinjs-lib": "^6.1.5",
-    "bip32": "^4.0.0",
     "tiny-secp256k1": "^2.2.3",
-    "@mysten/sui": "^2.16.0",
     "tronweb": "^6.0.0"
   },
   "devDependencies": {

@@ -52,7 +52,7 @@ export function useWallet() {
         setPrices(currentPrices);
 
         // Fetch balances for a subset of chains for the UI
-        const selectedChains = ['ethereum', 'polygon', 'bsc', 'tron', 'monad', 'xrpl_evm'];
+        const selectedChains = ['ethereum', 'polygon', 'bsc', 'tron', 'monad', 'bitcoin', 'sui'];
         
         const newTokens: Token[] = await Promise.all(selectedChains.map(async (chainKey) => {
             const config = CHAINS[chainKey];
@@ -162,18 +162,18 @@ export function useWallet() {
         }
     };
 
-    const swap = async (fromToken: string, toToken: string, amount: string) => {
+    const swap = async (fromToken: string, toToken: string, amount: string, fromChain?: string, toChain?: string) => {
         if (!activeWallet) return false;
         try {
             const fromTokenObj = tokens.find(t => t.symbol === fromToken);
             const targetTokenObj = tokens.find(t => t.symbol === toToken);
             if (!fromTokenObj || !targetTokenObj) return false;
 
-            const fromChainKey = Object.keys(CHAINS).find(key => CHAINS[key].id === fromTokenObj.chainId) || 'ethereum';
-            const toChainKey = Object.keys(CHAINS).find(key => CHAINS[key].id === targetTokenObj.chainId) || 'ethereum';
+            const fChain = fromChain || Object.keys(CHAINS).find(key => CHAINS[key].id === fromTokenObj.chainId) || 'ethereum';
+            const tChain = toChain || Object.keys(CHAINS).find(key => CHAINS[key].id === targetTokenObj.chainId) || 'ethereum';
 
-            const quote = await core.getSwapQuote(fromToken, toToken, amount, fromChainKey, toChainKey, activeWallet.address);
-            await core.executeSwap(activeWallet.id, fromChainKey, quote);
+            const quote = await core.getSwapQuote(fromToken, toToken, amount, fChain, tChain, activeWallet.address);
+            await core.executeSwap(activeWallet.id, fChain, quote);
             return true;
         } catch (e) {
             console.error(e);
