@@ -3,9 +3,8 @@
 import { useState, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, RoundedBox, Float } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
 import { Group } from 'three';
-
+ 
 interface TransactionPanelProps {
     token: {
         symbol: string;
@@ -20,26 +19,29 @@ interface TransactionPanelProps {
     onSend: (to: string, amount: string, symbol: string) => Promise<boolean>;
     onSwap: (from: string, to: string, amount: string) => Promise<boolean>;
 }
-
+ 
 function Button3D({ label, onClick, position, color = "#444" }: { label: string, onClick: () => void, position: [number, number, number], color?: string }) {
     const [hovered, setHovered] = useState(false);
     return (
-        <Interactive onSelect={onClick} onHover={() => setHovered(true)} onBlur={() => setHovered(false)}>
-            <group position={position}>
-                <RoundedBox args={[0.8, 0.25, 0.05]} radius={0.05} smoothness={4} scale={hovered ? 1.05 : 1}>
-                    <meshStandardMaterial
-                        color={hovered ? "#fff" : color}
-                        emissive={hovered ? "#fff" : color}
-                        emissiveIntensity={hovered ? 0.5 : 0.2}
-                        metalness={0.8}
-                        roughness={0.2}
-                    />
-                </RoundedBox>
-                <Text position={[0, 0, 0.04]} fontSize={0.06} color={hovered ? "black" : "white"} anchorX="center" anchorY="middle">
-                    {label}
-                </Text>
-            </group>
-        </Interactive>
+        <group 
+          position={position}
+          onPointerDown={onClick}
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+        >
+            <RoundedBox args={[0.8, 0.25, 0.05]} radius={0.05} smoothness={4} scale={hovered ? 1.05 : 1}>
+                <meshStandardMaterial
+                    color={hovered ? "#fff" : color}
+                    emissive={hovered ? "#fff" : color}
+                    emissiveIntensity={hovered ? 0.5 : 0.2}
+                    metalness={0.8}
+                    roughness={0.2}
+                />
+            </RoundedBox>
+            <Text position={[0, 0, 0.04]} fontSize={0.06} color={hovered ? "black" : "white"} anchorX="center" anchorY="middle">
+                {label}
+            </Text>
+        </group>
     );
 }
 

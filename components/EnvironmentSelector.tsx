@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Text, RoundedBox, Float } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
 
 export type EnvType = 'space' | 'sunset' | 'forest' | 'city' | 'rain';
 
@@ -24,21 +23,28 @@ export default function EnvironmentSelector({ current, onSelect }: EnvironmentSe
     <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
       <group>
         <Text position={[0, 0.4, 0]} fontSize={0.06} color="white">ENVIRONMENT SELECTOR</Text>
-        
+
         {ENVS.map((env, i) => (
-          <Interactive key={env.type} onSelect={() => onSelect(env.type)}>
-            <group position={[(i - 2) * 0.35, 0, 0]}>
+            <group 
+              key={env.type} 
+              position={[(i - 2) * 0.35, 0, 0]}
+              onClick={() => onSelect(env.type)}
+              onPointerEnter={(e) => {
+                e.stopPropagation();
+                // We can add hover state here if needed
+              }}
+            >
               <RoundedBox args={[0.3, 0.3, 0.05]} radius={0.02}>
-                <meshStandardMaterial 
-                  color={current === env.type ? env.color : "#1e293b"} 
+                <meshStandardMaterial
+                  color={current === env.type ? env.color : "#1e293b"}
                   emissive={current === env.type ? env.color : "#000"}
                   emissiveIntensity={0.5}
                 />
               </RoundedBox>
-              <Text 
-                position={[0, -0.22, 0.03]} 
-                fontSize={0.04} 
-                color="white" 
+              <Text
+                position={[0, -0.22, 0.03]}
+                fontSize={0.04}
+                color="white"
                 rotation={[0, 0, 0]}
                 maxWidth={0.25}
                 textAlign="center"
@@ -46,7 +52,6 @@ export default function EnvironmentSelector({ current, onSelect }: EnvironmentSe
                 {env.label}
               </Text>
             </group>
-          </Interactive>
         ))}
       </group>
     </Float>

@@ -27,8 +27,8 @@ function PinButton({ value, onSelect, position, disabled }: { value: string; onS
     >
       <group position={position}>
         <RoundedBox args={[0.2, 0.2, 0.05]} radius={0.02} smoothness={4}>
-          <meshStandardMaterial 
-            color={disabled ? "#0f172a" : (pressed ? "#8b5cf6" : (hovered ? "#4c1d95" : "#1e293b"))} 
+          <meshStandardMaterial
+            color={disabled ? "#0f172a" : (pressed ? "#8b5cf6" : (hovered ? "#4c1d95" : "#1e293b"))}
             emissive={pressed ? "#a78bfa" : (hovered ? "#6d28d9" : "#000")}
             emissiveIntensity={hovered ? 0.5 : 0}
             metalness={0.8}
@@ -83,7 +83,7 @@ export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SEC
 
   const handleSelect = (val: string) => {
     if (isLockedOut) return;
-    
+
     if (val === "CLR") {
       setPin("");
     } else if (val === "OK") {
@@ -108,12 +108,12 @@ export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SEC
       <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
         {/* Background Panel */}
         <RoundedBox args={[1, 1.4, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
-          <meshStandardMaterial 
-            color={isLockedOut ? "#450a0a" : "#0f172a"} 
-            transparent 
-            opacity={0.9} 
-            metalness={0.9} 
-            roughness={0.1} 
+          <meshStandardMaterial
+            color={isLockedOut ? "#450a0a" : "#0f172a"}
+            transparent
+            opacity={0.9}
+            metalness={0.9}
+            roughness={0.1}
           />
         </RoundedBox>
 
@@ -129,22 +129,22 @@ export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SEC
 
         {/* PIN Display (Dots) or Lockout Timer */}
         <group position={[0, 0.35, 0.03]}>
-           {isLockedOut ? (
-             <Text
-                fontSize={0.1}
-                color="#ef4444"
-             >
-               {timeRemaining}s
-             </Text>
-           ) : (
-             <Text
-                fontSize={0.12}
-                color={error ? "#ef4444" : "#8b5cf6"}
-                letterSpacing={0.2}
-              >
-                {pin.split("").map(() => "•").join("") || "----"}
-              </Text>
-           )}
+          {isLockedOut ? (
+            <Text
+              fontSize={0.1}
+              color="#ef4444"
+            >
+              {timeRemaining}s
+            </Text>
+          ) : (
+            <Text
+              fontSize={0.12}
+              color={error ? "#ef4444" : "#8b5cf6"}
+              letterSpacing={0.2}
+            >
+              {pin.split("").map(() => "•").join("") || "----"}
+            </Text>
+          )}
           {error && !isLockedOut && (
             <Text position={[0, -0.15, 0]} fontSize={0.04} color="#ef4444">
               {error}
@@ -157,10 +157,10 @@ export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SEC
           {buttons.map((row, i) => (
             <group key={i} position={[0, -i * 0.25, 0]}>
               {row.map((val, j) => (
-                <PinButton 
-                  key={val} 
-                  value={val} 
-                  position={[(j - 1) * 0.25, 0, 0]} 
+                <PinButton
+                  key={val}
+                  value={val}
+                  position={[(j - 1) * 0.25, 0, 0]}
                   onSelect={handleSelect}
                   disabled={isLockedOut}
                 />

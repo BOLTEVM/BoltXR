@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, Float, useTexture } from '@react-three/drei';
 import { Mesh, MeshStandardMaterial, Group, Vector3 } from 'three';
-import { Interactive } from '@react-three/xr';
 
 interface Token3DProps {
     symbol: string;
@@ -22,7 +21,7 @@ export default function Token3D({ symbol, color, balance, network, position, onC
     const groupRef = useRef<Group>(null);
     const [hovered, setHovered] = useState(false);
     const [isGrabbed, setIsGrabbed] = useState(false);
-    
+
     // Load texture
     let texture: any = null;
     try {
@@ -71,105 +70,112 @@ export default function Token3D({ symbol, color, balance, network, position, onC
 
     return (
         <Float floatIntensity={isGrabbed ? 0 : 1} speed={2} rotationIntensity={isGrabbed ? 0 : 0.5}>
-            <Interactive
-                onSelectStart={handleSelectStart}
-                onSelectEnd={handleSelectEnd}
-                onHover={() => setHovered(true)}
-                onBlur={() => setHovered(false)}
+            <group 
+                ref={groupRef} 
+                position={position}
+                onPointerDown={(e) => {
+                    e.stopPropagation();
+                    handleSelectStart();
+                }}
+                onPointerUp={(e) => {
+                    e.stopPropagation();
+                    handleSelectEnd();
+                }}
+                onPointerOver={() => setHovered(true)}
+                onPointerOut={() => setHovered(false)}
             >
-                <group ref={groupRef} position={position}>
-                    {/* Error Halo */}
-                    {status === 'error' && (
-                        <mesh position={[0, 0, -0.05]}>
-                            <ringGeometry args={[0.35, 0.4, 32]} />
-                            <meshBasicMaterial color="#ef4444" transparent opacity={0.8} />
+                {/* Error Halo */}
+                {status === 'error' && (
+                    <mesh position={[0, 0, -0.05]}>
+                        <ringGeometry args={[0.35, 0.4, 32]} />
+                        <meshBasicMaterial color="#ef4444" transparent opacity={0.8} />
+                    </mesh>
+                )}
+
+                {/* 3D Coin Body */}
+                <mesh
+                    ref={meshRef}
+                    scale={hovered || isGrabbed ? 1.2 : 1}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClick();
+                    }}
+                    rotation={[Math.PI / 2, 0, 0]}
+                >
+                    <cylinderGeometry args={[0.3, 0.3, 0.08, 32]} />
+                    <meshStandardMaterial
+                        color={status === 'error' ? '#ef4444' : color}
+                        metalness={0.9}
+                        roughness={0.1}
+                        emissive={status === 'error' ? '#ef4444' : (isGrabbed ? "#fff" : color)}
+                        emissiveIntensity={hovered || status === 'error' || isGrabbed ? 0.8 : 0.2}
+                    />
+
+                    {/* Logo Face (Front) */}
+                    {texture && (
+                        <mesh position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                            <circleGeometry args={[0.22, 32]} />
+                            <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
                         </mesh>
                     )}
 
-                    {/* 3D Coin Body */}
-                    <mesh
-                        ref={meshRef}
-                        scale={hovered || isGrabbed ? 1.2 : 1}
-                        onClick={onClick}
-                        onPointerOver={() => setHovered(true)}
-                        onPointerOut={() => setHovered(false)}
-                        rotation={[Math.PI / 2, 0, 0]} 
-                    >
-                        <cylinderGeometry args={[0.3, 0.3, 0.08, 32]} />
-                        <meshStandardMaterial
-                            color={status === 'error' ? '#ef4444' : color}
-                            metalness={0.9}
-                            roughness={0.1}
-                            emissive={status === 'error' ? '#ef4444' : (isGrabbed ? "#fff" : color)}
-                            emissiveIntensity={hovered || status === 'error' || isGrabbed ? 0.8 : 0.2}
-                        />
-                        
-                        {/* Logo Face (Front) */}
-                        {texture && (
-                            <mesh position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                                <circleGeometry args={[0.22, 32]} />
-                                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-                            </mesh>
-                        )}
+                    {/* Logo Face (Back) */}
+                    {texture && (
+                        <mesh position={[0, -0.041, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                            <circleGeometry args={[0.22, 32]} />
+                            <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
+                        </mesh>
+                    )}
+                </mesh>
 
-                        {/* Logo Face (Back) */}
-                        {texture && (
-                            <mesh position={[0, -0.041, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                                <circleGeometry args={[0.22, 32]} />
-                                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-                            </mesh>
-                        )}
+                {/* Token Symbol (Floating Label) */}
+                <Text
+                    position={[0, 0.45, 0]}
+                    fontSize={0.08}
+                    color="white"
+                    anchorX="center"
+                    anchorY="bottom"
+                    font="https://fonts.gstatic.com/s/outfit/v11/Q_k79p9L6NqT0EOf07A.woff"
+                >
+                    {symbol}
+                </Text>
+
+                {/* Network Indicator */}
+                <group position={[0, -0.55, 0]}>
+                    <mesh>
+                        <sphereGeometry args={[0.04, 16, 16]} />
+                        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} />
                     </mesh>
-
-                    {/* Token Symbol (Floating Label) */}
                     <Text
-                        position={[0, 0.45, 0]}
-                        fontSize={0.08}
-                        color="white"
-                        anchorX="center"
-                        anchorY="bottom"
-                        font="https://fonts.gstatic.com/s/outfit/v11/Q_k79p9L6NqT0EOf07A.woff"
+                        position={[0.1, 0, 0]}
+                        fontSize={0.05}
+                        color={status === 'error' ? '#ef4444' : "#94a3b8"}
+                        anchorX="left"
+                        anchorY="middle"
                     >
-                        {symbol}
+                        {status === 'error' ? `${network} (OFFLINE)` : network}
                     </Text>
+                </group>
 
-                    {/* Network Indicator */}
-                    <group position={[0, -0.55, 0]}>
+                {/* Balance Text */}
+                {(hovered || isGrabbed) && (
+                    <group position={[0, 0.7, 0]}>
                         <mesh>
-                            <sphereGeometry args={[0.04, 16, 16]} />
-                            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} />
+                            <planeGeometry args={[0.8, 0.25]} />
+                            <meshStandardMaterial color="#000" transparent opacity={0.8} />
                         </mesh>
                         <Text
-                            position={[0.1, 0, 0]}
-                            fontSize={0.05}
-                            color={status === 'error' ? '#ef4444' : "#94a3b8"}
-                            anchorX="left"
+                            position={[0, 0, 0.01]}
+                            fontSize={0.12}
+                            color="white"
+                            anchorX="center"
                             anchorY="middle"
                         >
-                            {status === 'error' ? `${network} (OFFLINE)` : network}
+                            {balance} {symbol}
                         </Text>
                     </group>
-
-                    {/* Balance Text */}
-                    {(hovered || isGrabbed) && (
-                        <group position={[0, 0.7, 0]}>
-                            <mesh>
-                                <planeGeometry args={[0.8, 0.25]} />
-                                <meshStandardMaterial color="#000" transparent opacity={0.8} />
-                            </mesh>
-                            <Text
-                                position={[0, 0, 0.01]}
-                                fontSize={0.12}
-                                color="white"
-                                anchorX="center"
-                                anchorY="middle"
-                            >
-                                {balance} {symbol}
-                            </Text>
-                        </group>
-                    )}
-                </group>
-            </Interactive>
+                )}
+            </group>
         </Float>
     );
 }

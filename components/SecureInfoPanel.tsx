@@ -27,12 +27,12 @@ export default function SecureInfoPanel({ title, content, onClose }: SecureInfoP
       <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
         {/* Background Panel */}
         <RoundedBox args={[1.5, 1.2, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
-          <meshStandardMaterial 
-            color="#0f172a" 
-            transparent 
-            opacity={0.95} 
-            metalness={0.9} 
-            roughness={0.1} 
+          <meshStandardMaterial
+            color="#0f172a"
+            transparent
+            opacity={0.95}
+            metalness={0.9}
+            roughness={0.1}
           />
         </RoundedBox>
 
@@ -45,7 +45,7 @@ export default function SecureInfoPanel({ title, content, onClose }: SecureInfoP
         >
           {title}
         </Text>
-        
+
         {/* Warning Text */}
         <Text
           position={[0, 0.30, 0.03]}
@@ -59,7 +59,7 @@ export default function SecureInfoPanel({ title, content, onClose }: SecureInfoP
         {/* Content Area */}
         <group position={[0, 0, 0.03]}>
           <RoundedBox args={[1.3, 0.5, 0.02]} radius={0.02} smoothness={4} position={[0, 0, -0.01]}>
-             <meshStandardMaterial color="#020617" />
+            <meshStandardMaterial color="#020617" />
           </RoundedBox>
 
           {!revealed ? (
@@ -84,9 +84,9 @@ export default function SecureInfoPanel({ title, content, onClose }: SecureInfoP
         {/* Close Button */}
         <Interactive onSelect={onClose}>
           <group position={[0, -0.45, 0.03]}>
-             <RoundedBox args={[0.5, 0.15, 0.02]} radius={0.02} smoothness={4}>
-               <meshStandardMaterial color="#4c1d95" emissive="#6d28d9" emissiveIntensity={0.2} />
-             </RoundedBox>
+            <RoundedBox args={[0.5, 0.15, 0.02]} radius={0.02} smoothness={4}>
+              <meshStandardMaterial color="#4c1d95" emissive="#6d28d9" emissiveIntensity={0.2} />
+            </RoundedBox>
             <Text position={[0, 0, 0.02]} fontSize={0.04} color="white">
               I HAVE SAVED IT SECURELY
             </Text>
