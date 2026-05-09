@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Results } from '@mediapipe/hands';
+import type { Results } from '@mediapipe/hands';
+import { lovense } from '../lib/lovense';
 
 interface Point {
   x: number;
@@ -115,6 +116,12 @@ export const useHandInteractions = (
           const midX = (x0 + x1) / 2 - newW / 2;
           const midY = (y0 + y1) / 2 - newH / 2;
 
+          // Haptic Scale Feedback (Low rumble)
+          const hapticsEnabled = localStorage.getItem('HAPTICS_ENABLED') === 'true';
+          if (hapticsEnabled) {
+            lovense.sendCommand('vibrate', 3);
+          }
+
           const nextRects = buttonRects.map((r, j) =>
             j === i ? { ...r, x: midX, y: midY, w: newW, h: newH } : r
           );
@@ -131,6 +138,12 @@ export const useHandInteractions = (
         if (!pinchStartRef.current[hi]) {
           pinchStartRef.current[hi] = { time: Date.now(), x: sx, y: sy };
           didDragRef.current[hi] = false;
+
+          // Haptic Pinch Confirmation
+          const hapticsEnabled = localStorage.getItem('HAPTICS_ENABLED') === 'true';
+          if (hapticsEnabled) {
+            lovense.sendCommand('vibrate', 5);
+          }
 
           // Check close hit
           let hitCloseId: string | undefined;
@@ -184,6 +197,12 @@ export const useHandInteractions = (
             });
 
             if (!dismissed && dragRef.current[hi]) {
+              // Haptic Tap Confirmation
+              const hapticsEnabled = localStorage.getItem('HAPTICS_ENABLED') === 'true';
+              if (hapticsEnabled) {
+                lovense.sendCommand('vibrate', 15);
+                setTimeout(() => lovense.stopAll(), 200);
+              }
               activateButton(dragRef.current[hi]!.i);
             }
           }

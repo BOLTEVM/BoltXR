@@ -3,7 +3,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '../hooks/useSettings';
-import { Settings, Cpu, Layers, X, Info } from 'lucide-react';
+import { Settings, Cpu, Layers, X, Info, Zap, Link } from 'lucide-react';
+import { lovense } from '../lib/lovense';
 
 const SettingsMenu: React.FC = () => {
   const { 
@@ -12,7 +13,11 @@ const SettingsMenu: React.FC = () => {
     activeStack, 
     setActiveStack, 
     modelComplexity, 
-    setModelComplexity 
+    setModelComplexity,
+    hapticsEnabled,
+    setHapticsEnabled,
+    lovenseToken,
+    setLovenseToken
   } = useSettings();
 
   if (!showSettings) return null;
@@ -90,6 +95,49 @@ const SettingsMenu: React.FC = () => {
                   >
                     FULL
                   </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* HAPTICS */}
+            <div className="settings-section">
+              <div className="section-title">
+                <Zap size={14} className="mr-2" /> HAPTIC STACK
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 glass rounded-xl border border-white/5">
+                  <div>
+                    <div className="text-sm font-bold">Haptic Feedback</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">
+                      bHaptics & Lovense integration
+                    </div>
+                  </div>
+                  <button 
+                    className={`toggle-tab ${hapticsEnabled ? 'active' : ''}`}
+                    onClick={() => setHapticsEnabled(!hapticsEnabled)}
+                  >
+                    {hapticsEnabled ? 'ENABLED' : 'DISABLED'}
+                  </button>
+                </div>
+
+                <div className={`p-4 glass rounded-xl border border-white/5 transition-opacity ${!hapticsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Link size={12} className="text-purple-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Lovense Token</span>
+                    </div>
+                    <div className={`status-pill ${lovense.getIsConnected() ? 'connected' : 'disconnected'}`}>
+                      {lovense.getIsConnected() ? 'CONNECTED' : 'OFFLINE'}
+                    </div>
+                  </div>
+                  <input 
+                    type="password"
+                    value={lovenseToken}
+                    onChange={(e) => setLovenseToken(e.target.value)}
+                    onBlur={() => lovense.setToken(lovenseToken)}
+                    placeholder="Enter Developer Token..."
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono focus:border-purple-500/50 outline-none transition-colors"
+                  />
                 </div>
               </div>
             </div>
@@ -209,6 +257,24 @@ const SettingsMenu: React.FC = () => {
             letter-spacing: 0.3em;
             color: rgba(255,255,255,0.2);
             text-align: center;
+          }
+
+          .status-pill {
+            font-size: 8px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.1em;
+          }
+          .status-pill.connected {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+          }
+          .status-pill.disconnected {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.2);
           }
         `}</style>
       </motion.div>

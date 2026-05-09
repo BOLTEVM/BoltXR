@@ -11,6 +11,10 @@ interface SettingsContextType {
   setModelComplexity: (val: 0 | 1) => void;
   showSettings: boolean;
   setShowSettings: (val: boolean) => void;
+  hapticsEnabled: boolean;
+  setHapticsEnabled: (val: boolean) => void;
+  lovenseToken: string;
+  setLovenseToken: (val: string) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -19,6 +23,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [activeStack, setActiveStack] = useState<AppStack>('2D');
   const [modelComplexity, setModelComplexity] = useState<0 | 1>(1);
   const [showSettings, setShowSettings] = useState(false);
+  const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [lovenseToken, setLovenseToken] = useState('');
 
   // Load from localStorage
   useEffect(() => {
@@ -27,13 +33,18 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     
     if (savedStack) setActiveStack(savedStack);
     if (savedComplexity) setModelComplexity(Number(savedComplexity) as 0 | 1);
+
+    setHapticsEnabled(localStorage.getItem('HAPTICS_ENABLED') === 'true');
+    setLovenseToken(localStorage.getItem('LOVENSE_TOKEN') || '');
   }, []);
 
   // Save to localStorage
   useEffect(() => {
     localStorage.setItem('bolt_active_stack', activeStack);
     localStorage.setItem('bolt_model_complexity', String(modelComplexity));
-  }, [activeStack, modelComplexity]);
+    localStorage.setItem('HAPTICS_ENABLED', String(hapticsEnabled));
+    localStorage.setItem('LOVENSE_TOKEN', lovenseToken);
+  }, [activeStack, modelComplexity, hapticsEnabled, lovenseToken]);
 
   return (
     <SettingsContext.Provider value={{
@@ -42,7 +53,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       modelComplexity,
       setModelComplexity,
       showSettings,
-      setShowSettings
+      setShowSettings,
+      hapticsEnabled,
+      setHapticsEnabled,
+      lovenseToken,
+      setLovenseToken
     }}>
       {children}
     </SettingsContext.Provider>

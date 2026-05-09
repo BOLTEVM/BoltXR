@@ -1,4 +1,4 @@
-import { ethers, wordlists } from 'ethers';
+import { ethers } from 'ethers';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as bip39 from 'bip39';
 import { BIP32Factory } from 'bip32';
@@ -7,16 +7,16 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { BridgeManager } from './bridge-manager';
 
 const bip32 = BIP32Factory(ecc);
-import { LangEn } from 'ethers/wordlists';
+// import { LangEn } from 'ethers/wordlists';
 import { CHAINS as CORE_CHAINS } from "./chains";
 
 // BOLT-09: Robust wordlist resolution to prevent "FAILED" errors in minified builds
 // We explicitly register the English wordlist into the global ethers wordlists.
 if (typeof window !== 'undefined') {
   try {
-    const en = LangEn.wordlist();
-    if (!(wordlists as any).en) {
-      (wordlists as any).en = en;
+    const en = ethers.wordlists.en;
+    if (!(ethers.wordlists as any).en) {
+      (ethers.wordlists as any).en = en;
     }
   } catch (e) {
     console.warn("BIP39 wordlist initialization warning:", e);
@@ -24,13 +24,13 @@ if (typeof window !== 'undefined') {
 }
 
 const VAULT_KEY = 'bolt_vault_v1';
-const providerCache: Record<string, ethers.JsonRpcProvider> = {};
+const providerCache: Record<string, ethers.providers.JsonRpcProvider> = {};
 
 const getProvider = (rpcUrl: string) => {
   if (!rpcUrl) return null;
   if (!providerCache[rpcUrl]) {
     try {
-      providerCache[rpcUrl] = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+      providerCache[rpcUrl] = new ethers.providers.JsonRpcProvider(rpcUrl);
     } catch (e) {
       console.error("Provider Initialization Error:", e);
       return null;
@@ -286,7 +286,7 @@ const decryptData = async (encrypted: string, salt: string, iv: string, password
 
 const validateTransactionPayload = (tx: any) => {
   if (!tx.to) throw new Error("Transaction recipient (to) is missing");
-  if (!ethers.isAddress(tx.to)) throw new Error("Invalid recipient address");
+  if (!ethers.utils.isAddress(tx.to)) throw new Error("Invalid recipient address");
 
   if (tx.value) {
     try {
@@ -403,8 +403,8 @@ export const deriveAddress = (mnemonic: string, index: number, chainId: string =
   try {
     // 1. EVM / Tron EVM / XRPL EVM
     if (chainId === 'ethereum' || chainId === 'bsc' || chainId === 'polygon' || chainId === 'monad' || chainId === 'xrpl_evm' || chainId === 'coredao' || chainId === 'pulsechain') {
-      const wordlist = (wordlists as any).en || LangEn.wordlist();
-      const wallet = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, fullPath, wordlist);
+      const wordlist = ethers.wordlists.en;
+      const wallet = ethers.utils.HDNode.fromMnemonic(mnemonic, undefined, wordlist).derivePath(fullPath);
       return wallet.address;
     }
 
@@ -422,14 +422,14 @@ export const deriveAddress = (mnemonic: string, index: number, chainId: string =
 
     // 3. Tron (Mainnet)
     if (chainId === 'tron') {
-      const wordlist = (wordlists as any).en || LangEn.wordlist();
-      const wallet = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, fullPath, wordlist);
+      const wordlist = ethers.wordlists.en;
+      const wallet = ethers.utils.HDNode.fromMnemonic(mnemonic, undefined, wordlist).derivePath(fullPath);
       // Tron uses the same key as EVM but prepends 0x41 and applies Base58Check
       const ethAddr = wallet.address.replace('0x', '41');
-      const hash1 = ethers.sha256(ethers.getBytes('0x' + ethAddr));
-      const hash2 = ethers.sha256(ethers.getBytes(hash1));
+      const hash1 = ethers.utils.sha256(ethers.utils.arrayify('0x' + ethAddr));
+      const hash2 = ethers.utils.sha256(ethers.utils.arrayify(hash1));
       const checksum = hash2.substring(2, 10);
-      return ethers.encodeBase58(ethers.getBytes('0x' + ethAddr + checksum));
+      return ethers.utils.base58.encode(ethers.utils.arrayify('0x' + ethAddr + checksum));
     }
 
     // 4. Sui
@@ -509,7 +509,7 @@ export const signTransaction = async (walletId: string, chainId: string, txHex: 
     const basePath = DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/";
     const fullPath = basePath.endsWith('/') ? `${basePath}${w.index}` : `${basePath}/${w.index}`;
     
-    const wordlist = (wordlists as any).en || LangEn.wordlist();
+    const wordlist = ethers.wordlists.en;
     const chainConfig = CHAINS[chainId as keyof typeof CHAINS];
     
     // 1. Bitcoin Signing (PSBT)
@@ -534,22 +534,22 @@ export const signTransaction = async (walletId: string, chainId: string, txHex: 
     }
 
     // 3. EVM Signing (Standard)
-    const hdNode = ethers.HDNodeWallet.fromPhrase(sessionMnemonic, undefined, fullPath, wordlist);
+    const hdNode = ethers.utils.HDNode.fromMnemonic(sessionMnemonic, undefined, wordlist).derivePath(fullPath);
     const wallet = new ethers.Wallet(hdNode.privateKey);
 
     const signature = await wallet.signTransaction({
       to: txParams.to,
-      value: txParams.value ? ethers.parseEther(txParams.value.toString()) : 0n,
+      value: txParams.value ? ethers.utils.parseEther(txParams.value.toString()) : 0,
       data: txParams.data || '0x',
       nonce: txParams.nonce || 0,
-      gasLimit: txParams.gasLimit || 21000n,
-      gasPrice: txParams.gasPrice || ethers.parseUnits('1', 'gwei'),
+      gasLimit: txParams.gasLimit || 21000,
+      gasPrice: txParams.gasPrice || ethers.utils.parseUnits('1', 'gwei'),
       chainId: Number(chainConfig?.id || 1)
     });
 
     const from = hdNode.address;
     const newHistory: HistoryData = {
-      hash: ethers.keccak256(signature),
+      hash: ethers.utils.keccak256(signature),
       type: txParams.data && txParams.to === '0x' ? 'contract_call' : 'send',
       from,
       to: txParams.to,
@@ -614,7 +614,7 @@ export const getNativeBalance = async (address: string, rpcUrl: string, chainId?
 
   try {
     const balance = await provider.getBalance(address);
-    return ethers.formatEther(balance);
+    return ethers.utils.formatEther(balance);
   } catch (e: any) {
     console.error("Balance Fetch Error:", e);
     return "0.00";
@@ -627,23 +627,23 @@ export const getGasPriceEstimates = async (rpcUrl: string) => {
 
   try {
     const feeData = await provider.getFeeData();
-    const baseFee = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+    const baseFee = feeData.gasPrice || ethers.utils.parseUnits('1', 'gwei');
 
     return {
-      baseFee: ethers.formatUnits(baseFee, 'gwei'),
+      baseFee: ethers.utils.formatUnits(baseFee, 'gwei'),
       slow: {
         priorityFee: "1",
-        maxFee: ethers.formatUnits(baseFee + ethers.parseUnits('1', 'gwei'), 'gwei'),
+        maxFee: ethers.utils.formatUnits(baseFee.add(ethers.utils.parseUnits('1', 'gwei')), 'gwei'),
         speed: 'slow'
       },
       average: {
         priorityFee: "2",
-        maxFee: ethers.formatUnits(baseFee + ethers.parseUnits('2', 'gwei'), 'gwei'),
+        maxFee: ethers.utils.formatUnits(baseFee.add(ethers.utils.parseUnits('2', 'gwei')), 'gwei'),
         speed: 'average'
       },
       fast: {
         priorityFee: "5",
-        maxFee: ethers.formatUnits(baseFee + ethers.parseUnits('5', 'gwei'), 'gwei'),
+        maxFee: ethers.utils.formatUnits(baseFee.add(ethers.utils.parseUnits('5', 'gwei')), 'gwei'),
         speed: 'fast'
       }
     };
@@ -665,7 +665,7 @@ export const getContractBalance = async (contractAddress: string, walletAddress:
     const abi = ["function balanceOf(address) view returns (uint256)"];
     const contract = new ethers.Contract(contractAddress, abi, provider);
     const balance = await contract.balanceOf(walletAddress);
-    return ethers.formatUnits(balance, decimals);
+    return ethers.utils.formatUnits(balance, decimals);
   } catch (e) {
     return "0.00";
   }

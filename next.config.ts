@@ -7,14 +7,25 @@ const nextConfig: NextConfig = {
   },
   /* config options here */
   reactCompiler: true,
-  turbopack: {},
+  turbopack: {
+    resolveAlias: {
+      three: 'three',
+    },
+  },
   webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      three: require.resolve('three'),
+    };
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       net: false,
       tls: false,
-      crypto: false,
+      crypto: require.resolve('crypto-browserify'),
+      stream: require.resolve('stream-browserify'),
+      buffer: require.resolve('buffer/'),
+      process: require.resolve('process/browser'),
     };
     return config;
   },

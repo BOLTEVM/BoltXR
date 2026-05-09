@@ -1,6 +1,13 @@
 import React, { useEffect } from 'react';
-import { Results, HAND_CONNECTIONS } from '@mediapipe/hands';
-import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
+import * as mpHands from '@mediapipe/hands';
+import type { Results } from '@mediapipe/hands';
+import * as drawingUtils from '@mediapipe/drawing_utils';
+
+const HAND_CONNECTIONS = (mpHands as any).HAND_CONNECTIONS || (typeof window !== 'undefined' && (window as any).HAND_CONNECTIONS);
+
+// Helper to handle MediaPipe's sometimes inconsistent export structure
+const drawConnectors = (drawingUtils as any).drawConnectors || (drawingUtils as any).default?.drawConnectors;
+const drawLandmarks = (drawingUtils as any).drawLandmarks || (drawingUtils as any).default?.drawLandmarks;
 
 interface HandOverlayProps {
   results: Results | null;

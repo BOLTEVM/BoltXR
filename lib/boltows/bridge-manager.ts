@@ -2,9 +2,11 @@ import { createConfig, getQuote, ExtendedChain, LiFiStep } from '@lifi/sdk';
 import { ThorchainQuery } from '@xchainjs/xchain-thorchain-query';
 import { assetFromString, baseAmount, Asset, CryptoAmount } from '@xchainjs/xchain-util';
 
-createConfig({
-  integrator: 'BoltXR',
-});
+if (typeof window !== 'undefined') {
+  createConfig({
+    integrator: 'BoltXR',
+  });
+}
 
 const thorchainQuery = new ThorchainQuery();
 

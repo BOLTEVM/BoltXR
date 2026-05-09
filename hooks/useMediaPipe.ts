@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Hands, Results, HAND_CONNECTIONS } from '@mediapipe/hands';
-import { Camera } from '@mediapipe/camera_utils';
+import type { Results, Hands as HandsType } from '@mediapipe/hands';
+import * as mpHands from '@mediapipe/hands';
+import type { Camera as CameraType } from '@mediapipe/camera_utils';
+import * as cam from '@mediapipe/camera_utils';
+
+// MediaPipe packages often don't have proper ESM exports and set globals instead
+const Hands = (mpHands as any).Hands || (typeof window !== 'undefined' && (window as any).Hands);
+const Camera = (cam as any).Camera || (typeof window !== 'undefined' && (window as any).Camera);
+const HAND_CONNECTIONS = (mpHands as any).HAND_CONNECTIONS || (typeof window !== 'undefined' && (window as any).HAND_CONNECTIONS);
+
+export type { Results };
 
 export interface HandLandmark {
   x: number;
@@ -21,8 +30,8 @@ export const useMediaPipe = (
 ) => {
   const [results, setResults] = useState<Results | null>(null);
   const [status, setStatus] = useState<'INITIALIZING' | 'TRACKING' | 'NO_HANDS' | 'ERROR'>('INITIALIZING');
-  const handsRef = useRef<Hands | null>(null);
-  const cameraRef = useRef<Camera | null>(null);
+  const handsRef = useRef<HandsType | null>(null);
+  const cameraRef = useRef<CameraType | null>(null);
   const isProcessingRef = useRef(false);
   const isStartedRef = useRef(false);
 
@@ -47,7 +56,7 @@ export const useMediaPipe = (
     if (handsRef.current) return;
 
     const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
     hands.setOptions({

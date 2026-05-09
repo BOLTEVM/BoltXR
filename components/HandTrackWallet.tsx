@@ -10,6 +10,7 @@ import InteractionSystem from './InteractionSystem';
 import WalletOverlaySystem from './WalletOverlaySystem';
 import { useSettings } from '../hooks/useSettings';
 import { FRAMEWORK_BUTTONS, GENERIC_BUTTONS, Rect, ButtonDef } from '../lib/constants';
+import { lovense } from '../lib/lovense';
 
 const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const { setShowSettings, modelComplexity } = useSettings();
@@ -151,7 +152,10 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         cursorPos={interaction.indexTip}
         isFramework={isFramework}
         onToggleMode={() => setIsFramework(!isFramework)}
-        onExit={onExit}
+        onExit={() => {
+          lovense.stopAll();
+          onExit();
+        }}
         onOpenSettings={() => setShowSettings(true)}
       />
 
