@@ -6,9 +6,10 @@ import Image from 'next/image';
 
 interface LandingPageProps {
   onEnter: () => void;
+  onEnterHandtrack: () => void;
 }
 
-export default function LandingPage({ onEnter }: LandingPageProps) {
+export default function LandingPage({ onEnter, onEnterHandtrack }: LandingPageProps) {
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[#020617] text-white">
       {/* Dynamic Background */}
@@ -65,6 +66,12 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                 className="px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold flex items-center gap-2 hover:shadow-[0_0_30px_rgba(147,51,234,0.3)] transition-all active:scale-95"
               >
                 ENTER VR EXPERIENCE <ArrowRight className="h-5 w-5" />
+              </button>
+              <button 
+                onClick={onEnterHandtrack}
+                className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-bold flex items-center gap-2 hover:bg-white/10 transition-all active:scale-95"
+              >
+                WEB INTERFACE (HANDS) <Zap className="h-5 w-5" />
               </button>
               <button 
                 onClick={() => window.open('https://github.com/BOLTEVM/BoltXR/releases/latest', '_blank')}

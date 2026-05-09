@@ -8,9 +8,8 @@ import LandingPage from './LandingPage';
 
 const store = createXRStore();
 
-export default function WalletXR() {
+export default function WalletXR({ onExit }: { onExit: () => void }) {
     const [mounted, setMounted] = useState(false);
-    const [showLanding, setShowLanding] = useState(true);
     const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
 
     useEffect(() => {
@@ -30,10 +29,6 @@ export default function WalletXR() {
 
     if (!mounted) return null;
 
-    if (showLanding) {
-        return <LandingPage onEnter={() => setShowLanding(false)} />;
-    }
-
     return (
         <div className="h-screen w-screen bg-black relative">
             {/* Minimal Overlay for Control */}
@@ -44,7 +39,7 @@ export default function WalletXR() {
                         <p className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Spatial Finance</p>
                     </div>
                     <button 
-                        onClick={() => setShowLanding(true)}
+                        onClick={onExit}
                         className="text-[10px] text-gray-500 hover:text-white uppercase tracking-widest font-bold bg-white/5 p-2 rounded-lg transition-colors"
                     >
                         Exit

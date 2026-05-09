@@ -34,6 +34,9 @@
   "dependencies": {
     "@lifi/sdk": "^3.1.0",
     "@lifi/types": "^1.5.0",
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/drawing_utils": "^0.3.1675466124",
+    "@mediapipe/hands": "^0.4.1675469240",
     "@mysten/sui": "^2.16.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
@@ -56,6 +59,7 @@
     "process": "^0.11.10",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-webcam": "^7.2.0",
     "sass": "^1.97.0",
     "thirdweb": "^5.116.1",
     "three": "^0.170.0",
