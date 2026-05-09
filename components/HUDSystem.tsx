@@ -1,4 +1,5 @@
 import React from 'react';
+import { Settings } from 'lucide-react';
 
 interface HUDSystemProps {
   status: string;
@@ -8,6 +9,7 @@ interface HUDSystemProps {
   isFramework: boolean;
   onToggleMode: () => void;
   onExit: () => void;
+  onOpenSettings: () => void;
 }
 
 const HUDSystem: React.FC<HUDSystemProps> = ({
@@ -18,6 +20,7 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
   isFramework,
   onToggleMode,
   onExit,
+  onOpenSettings,
 }) => {
   return (
     <>
@@ -32,6 +35,9 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
         </div>
         <div className="exit-button" onClick={(e) => { e.stopPropagation(); onExit(); }}>
           [ EXIT INTERFACE ]
+        </div>
+        <div className="settings-trigger" onClick={(e) => { e.stopPropagation(); onOpenSettings(); }}>
+          <Settings size={14} />
         </div>
       </div>
 
@@ -80,6 +86,25 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
         .exit-button:hover {
           color: #ff6af5;
           letter-spacing: 0.3em;
+        }
+        .settings-trigger {
+          margin-top: 16px;
+          color: rgba(255, 255, 255, 0.4);
+          cursor: pointer;
+          pointer-events: auto;
+          transition: all 0.2s;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 50%;
+        }
+        .settings-trigger:hover {
+          color: #ffe94a;
+          border-color: #ffe94a;
+          background: rgba(255, 233, 74, 0.1);
+          transform: rotate(45deg);
         }
         .toggle-hint {
           opacity: 0.4;

@@ -4,25 +4,27 @@ import { useState } from 'react';
 import WalletXR from '@/components/WalletXR';
 import HandTrackWallet from '@/components/HandTrackWallet';
 import LandingPage from '@/components/LandingPage';
+import { useSettings } from '@/hooks/useSettings';
 
 export default function Home() {
-  const [mode, setMode] = useState<'landing' | 'xr' | 'handtrack'>('landing');
+  const [isLanding, setIsLanding] = useState(true);
+  const { activeStack, setActiveStack } = useSettings();
 
-  if (mode === 'landing') {
+  if (isLanding) {
     return (
       <LandingPage 
-        onEnter={() => setMode('xr')} 
-        onEnterHandtrack={() => setMode('handtrack')} 
+        onEnter={() => { setActiveStack('XR'); setIsLanding(false); }} 
+        onEnterHandtrack={() => { setActiveStack('2D'); setIsLanding(false); }} 
       />
     );
   }
 
   return (
     <main className="min-h-screen">
-      {mode === 'xr' ? (
-        <WalletXR onExit={() => setMode('landing')} />
+      {activeStack === 'XR' ? (
+        <WalletXR onExit={() => setIsLanding(true)} />
       ) : (
-        <HandTrackWallet onExit={() => setMode('landing')} />
+        <HandTrackWallet onExit={() => setIsLanding(true)} />
       )}
     </main>
   );

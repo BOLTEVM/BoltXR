@@ -8,9 +8,11 @@ import HandOverlay from './HandOverlay';
 import HUDSystem from './HUDSystem';
 import InteractionSystem from './InteractionSystem';
 import WalletOverlaySystem from './WalletOverlaySystem';
+import { useSettings } from '../hooks/useSettings';
 import { FRAMEWORK_BUTTONS, GENERIC_BUTTONS, Rect, ButtonDef } from '../lib/constants';
 
 const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+  const { setShowSettings, modelComplexity } = useSettings();
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const modalCloseRef = useRef<HTMLDivElement>(null);
@@ -98,7 +100,7 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   }, [modalOpen, drawerOpen]);
 
   // Hooks
-  const { results, status } = useMediaPipe(webcamRef as any);
+  const { results, status } = useMediaPipe(webcamRef as any, { modelComplexity });
   const interaction = useHandInteractions(
     results,
     canvasRef,
@@ -150,6 +152,7 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         isFramework={isFramework}
         onToggleMode={() => setIsFramework(!isFramework)}
         onExit={onExit}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       <InteractionSystem

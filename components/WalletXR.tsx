@@ -3,12 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
+import { Settings } from 'lucide-react';
+import { useSettings } from '@/hooks/useSettings';
 import Scene from './Scene';
 import LandingPage from './LandingPage';
 
 const store = createXRStore();
 
 export default function WalletXR({ onExit }: { onExit: () => void }) {
+    const { setShowSettings } = useSettings();
     const [mounted, setMounted] = useState(false);
     const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
 
@@ -38,12 +41,20 @@ export default function WalletXR({ onExit }: { onExit: () => void }) {
                         <h1 className="text-2xl font-black text-white tracking-tighter">BOLT XR</h1>
                         <p className="text-[10px] text-purple-400 uppercase tracking-widest font-bold">Spatial Finance</p>
                     </div>
-                    <button 
-                        onClick={onExit}
-                        className="text-[10px] text-gray-500 hover:text-white uppercase tracking-widest font-bold bg-white/5 p-2 rounded-lg transition-colors"
-                    >
-                        Exit
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShowSettings(true)}
+                            className="text-gray-500 hover:text-white bg-white/5 p-2 rounded-lg transition-colors"
+                        >
+                            <Settings size={14} />
+                        </button>
+                        <button 
+                            onClick={onExit}
+                            className="text-[10px] text-gray-500 hover:text-white uppercase tracking-widest font-bold bg-white/5 p-2 rounded-lg transition-colors"
+                        >
+                            Exit
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex gap-3">
