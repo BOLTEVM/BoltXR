@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { BoltwalletCore, WalletData } from '@/lib/boltows/ows-core';
+import { BoltwalletCore, WalletData, SwapQuoteParams, SwapError } from '@/lib/boltows/ows-core';
 import { CHAINS } from '@/lib/boltows/chains';
 
 export type Token = {
@@ -162,21 +162,54 @@ export function useWallet() {
         }
     };
 
+    const [swapStatus, setSwapStatus] = useState<string | null>(null);
+    const [swapSlippage, setSwapSlippage] = useState(0.005); // 0.5% default
+
     const swap = async (fromToken: string, toToken: string, amount: string, fromChain?: string, toChain?: string) => {
         if (!activeWallet) return false;
+        setSwapStatus("INITIALIZING");
         try {
             const fromTokenObj = tokens.find(t => t.symbol === fromToken);
             const targetTokenObj = tokens.find(t => t.symbol === toToken);
-            if (!fromTokenObj || !targetTokenObj) return false;
+            if (!fromTokenObj || !targetTokenObj) {
+                setSwapStatus("ERROR: TOKEN NOT FOUND");
+                return false;
+            }
 
             const fChain = fromChain || Object.keys(CHAINS).find(key => CHAINS[key].id === fromTokenObj.chainId) || 'ethereum';
             const tChain = toChain || Object.keys(CHAINS).find(key => CHAINS[key].id === targetTokenObj.chainId) || 'ethereum';
 
-            const quote = await core.getSwapQuote(fromToken, toToken, amount, fChain, tChain, activeWallet.address);
-            await core.executeSwap(activeWallet.id, fChain, quote);
+            setSwapStatus("FETCHING QUOTE");
+            const quoteParams: SwapQuoteParams = {
+                fromChainKey: fChain,
+                toChainKey: tChain,
+                fromToken: fromToken,
+                toToken: targetTokenObj.symbol,
+                fromAmount: amount,
+                fromAddress: activeWallet.address,
+                slippage: swapSlippage,
+            };
+            const quote = await core.getSwapQuote(quoteParams);
+            
+            if (!quote) {
+                setSwapStatus("ERROR: NO QUOTE");
+                return false;
+            }
+
+            setSwapStatus("WAITING FOR SIGNATURE");
+            const txHash = await core.executeSwap(activeWallet.id, fChain, quote);
+            
+            setSwapStatus(`COMPLETED: ${txHash.substring(0, 10)}...`);
+            setTimeout(() => setSwapStatus(null), 5000);
             return true;
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
+            if (e instanceof SwapError) {
+                setSwapStatus(`ERROR: ${e.code} — ${e.message}`);
+            } else {
+                setSwapStatus(`ERROR: ${e.message}`);
+            }
+            setTimeout(() => setSwapStatus(null), 5000);
             return false;
         }
     };
@@ -192,6 +225,9 @@ export function useWallet() {
         connect: () => { }, // Handled by unlock/setup
         send,
         swap,
+        swapStatus,
+        swapSlippage,
+        setSwapSlippage,
         failedAttempts,
         lockoutUntil
     };

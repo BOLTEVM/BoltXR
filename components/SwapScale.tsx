@@ -28,11 +28,11 @@ export default function SwapScale({
   const [targetRotation, setTargetRotation] = useState(0);
   const currentRotation = useRef(0);
 
-  // Calculate route type
+  // Calculate route type — all routing via unified LI.FI SwapProvider
   const routeType = useMemo(() => {
     if (!inputToken || !targetToken) return null;
-    if (inputToken.chainId === targetToken.chainId) return "DIRECT (1INCH)";
-    return "BRIDGE (LI.FI)";
+    if (inputToken.chainId === targetToken.chainId) return "SWAP (LI.FI)";
+    return "BRIDGE (LI.FI CROSS-CHAIN)";
   }, [inputToken, targetToken]);
 
   useFrame((state, delta) => {

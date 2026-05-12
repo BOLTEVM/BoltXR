@@ -22,14 +22,19 @@ export class BridgeManager {
     toToken: string,
     amount: string
   ): Promise<LiFiStep> {
-    return await getQuote({
-      fromChain,
-      toChain,
-      fromAddress,
-      fromToken,
-      toToken,
-      fromAmount: amount,
-    });
+    try {
+      return await getQuote({
+        fromChain,
+        toChain,
+        fromAddress,
+        fromToken,
+        toToken,
+        fromAmount: amount,
+      });
+    } catch (e: any) {
+      console.error("LI.FI Quote Error:", e);
+      throw new Error(`LI.FI Error: ${e.message}`);
+    }
   }
 
   /**
@@ -41,19 +46,52 @@ export class BridgeManager {
     amountStr: string,
     destinationAddress: string
   ): Promise<any> {
-    const fromAsset = assetFromString(fromAssetStr);
-    const toAsset = assetFromString(toAssetStr);
-    
-    if (!fromAsset || !toAsset) throw new Error("Invalid asset format for Thorchain");
+    try {
+      const fromAsset = assetFromString(fromAssetStr);
+      const toAsset = assetFromString(toAssetStr);
+      
+      if (!fromAsset || !toAsset) throw new Error("Invalid asset format for Thorchain");
 
-    // Convert to CryptoAmount for ThorchainQuery v2+
-    // Note: Use (thorchainQuery as any) to bypass local TS issues if types are strictly checking method presence
-    return await (thorchainQuery as any).quoteSwap({
-      fromAsset,
-      destinationAsset: toAsset,
-      amount: new CryptoAmount(baseAmount(amountStr), fromAsset),
-      destinationAddress,
-    });
+      const quote = await (thorchainQuery as any).quoteSwap({
+        fromAsset,
+        destinationAsset: toAsset,
+        amount: new CryptoAmount(baseAmount(amountStr), fromAsset),
+        destinationAddress,
+      });
+
+      // Standardize Thorchain quote to look more like a transaction request
+      return {
+        provider: 'thorchain',
+        quote: quote,
+        transactionRequest: {
+          to: quote.inboundAddress,
+          value: quote.expectedAmountOut.baseAmount.amount().toString(), // simplified
+          data: quote.memo,
+          from: quote.router || undefined
+        }
+      };
+    } catch (e: any) {
+      console.error("Thorchain Quote Error:", e);
+      throw new Error(`Thorchain Error: ${e.message}`);
+    }
+  }
+
+  /**
+   * Determine the best provider for a swap
+   */
+  static getProviderForSwap(fromChain: string, toChain: string, fromAsset: string): 'thorchain' | 'lifi' | '1inch' {
+    const isNativeBtc = fromAsset.toUpperCase().includes('BTC') || fromChain === 'bitcoin';
+    const isNativeEth = fromChain === 'ethereum' || fromChain === 'bsc' || fromChain === 'polygon';
+
+    if (isNativeBtc || (fromChain !== toChain && !isNativeEth)) {
+      return 'thorchain';
+    }
+
+    if (fromChain !== toChain) {
+      return 'lifi';
+    }
+
+    return '1inch';
   }
 
   /**
@@ -67,7 +105,8 @@ export class BridgeManager {
       'arbitrum': 42161,
       'optimism': 10,
       'base': 8453,
+      'avalanche': 43114,
     };
-    return mapping[chainKey] || 1;
+    return mapping[chainKey.toLowerCase()] || 1;
   }
 }

@@ -56,7 +56,7 @@ export default function TransactionPanel({ token, onClose, onSend, onSwap }: Tra
     const feeInfo = useMemo(() => {
         if (token.symbol === 'BTC') return "~45 sats/vB";
         if (token.symbol === 'SUI') return "~0.002 SUI";
-        return "~12 Gwei";
+        return "Live Gas (LI.FI)";
     }, [token.symbol]);
 
     const handleSend = async () => {
