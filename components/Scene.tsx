@@ -11,6 +11,8 @@ import SecurityPinPad from './SecurityPinPad';
 import TokenRain from './TokenRain';
 import EnvironmentSelector, { EnvType } from './EnvironmentSelector';
 import SecureInfoPanel from './SecureInfoPanel';
+import QRPanel3D from './QRPanel3D';
+import ContractClipboard3D from './ContractClipboard3D';
 
 export default function Scene() {
     const { tokens, account, isLocked, isVaultSetup, unlock, setup, connect, send, swap, lockoutUntil } = useWallet();
@@ -29,6 +31,10 @@ export default function Scene() {
     // Secure Info State
     const [showSecureInfo, setShowSecureInfo] = useState(false);
     const [secureContent, setSecureContent] = useState("");
+
+    // QR & Contract Clipboard State
+    const [showQR, setShowQR] = useState(false);
+    const [showClipboard, setShowClipboard] = useState(false);
 
     const handleConnect = () => {
         if (isLocked) {
@@ -114,7 +120,7 @@ export default function Scene() {
 
             {/* Main Dashboard */}
             <group position={[0, 2.4, -3]}>
-                <Dashboard account={account} isLocked={isLocked} onConnect={handleConnect} />
+                <Dashboard account={account} isLocked={isLocked} onConnect={handleConnect} onShowQR={() => setShowQR(!showQR)} onShowContracts={() => setShowClipboard(!showClipboard)} />
             </group>
 
             {/* Environment Selector */}
@@ -199,6 +205,24 @@ export default function Scene() {
             )}
 
             <OrbitControls makeDefault target={[0, 1.2, -1]} minDistance={1} maxDistance={10} />
+
+            {/* QR Panel */}
+            {showQR && !showPinPad && (
+                <group position={[1.8, 1.8, -1.5]} rotation={[0, -0.3, 0]}>
+                    <QRPanel3D address={account} onClose={() => setShowQR(false)} />
+                </group>
+            )}
+
+            {/* Contract Clipboard */}
+            {showClipboard && !showPinPad && (
+                <group position={[-1.8, 1.5, -1.5]} rotation={[0, 0.3, 0]}>
+                    <ContractClipboard3D
+                        chainId="ethereum"
+                        walletId={account}
+                        onClose={() => setShowClipboard(false)}
+                    />
+                </group>
+            )}
         </>
     );
 }

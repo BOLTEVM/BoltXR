@@ -91,7 +91,9 @@ export const useMediaPipe = (
           width: 640,
           height: 480,
         });
-        await cameraRef.current.start();
+        if (cameraRef.current) {
+          await cameraRef.current.start();
+        }
         isStartedRef.current = true;
         console.log("MediaPipe Camera Started");
       } catch (err) {

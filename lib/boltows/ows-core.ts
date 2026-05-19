@@ -5,9 +5,14 @@ import * as bip39 from 'bip39';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { Transaction } from '@mysten/sui/transactions';
 import { SwapProvider, SwapQuote, SwapQuoteParams, BridgeQuoteParams, SwapError } from './swap-provider';
+import { generateAddressQR, generateContractQR, parseQRPayload, fetchFromIPFS, uploadToIPFS, generateQRCanvas } from '../qr-codec';
+import { fetchABI, parseABIMethods } from '../abi-fetcher';
 export type { SwapQuote, SwapQuoteParams, BridgeQuoteParams };
 export { SwapError };
+export { generateAddressQR, generateContractQR, parseQRPayload, fetchFromIPFS, generateQRCanvas };
+export { fetchABI, parseABIMethods };
 
 const bip32 = BIP32Factory(ecc);
 import { CHAINS as CORE_CHAINS } from "./chains";
@@ -134,6 +139,22 @@ export interface WalletData {
 }
 
 let sessionMnemonic: string | null = null;
+let sessionPassword: string | null = null;
+let sessionLastActivity: number = 0;
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes auto-lock
+
+// SEC-01: Session timeout — auto-lock after inactivity
+const touchSession = () => { sessionLastActivity = Date.now(); };
+const isSessionExpired = () => {
+  if (!sessionMnemonic) return true;
+  if (Date.now() - sessionLastActivity > SESSION_TIMEOUT_MS) {
+    logEvent('security', 'Session expired — vault auto-locked', 'warning');
+    sessionMnemonic = null;
+    sessionPassword = null;
+    return true;
+  }
+  return false;
+};
 
 export class BoltwalletCore {
   private swapProvider = new SwapProvider();
@@ -275,9 +296,28 @@ export class BoltwalletCore {
       }
     }
 
-    // 2. Sui — native broadcast not yet implemented
+    // 2. Sui Broadcasting (real — via Sui JSON-RPC)
     if (chainId === 'sui') {
-      throw new Error("Native Sui broadcast not yet supported. Use a Sui-compatible wallet for transaction submission.");
+      try {
+        const chainConfig = CORE_CHAINS['sui'];
+        const response = await fetch(chainConfig?.rpc || 'https://rpc.ankr.com/sui', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'sui_executeTransactionBlock',
+            params: [signedHex, [], null, 'WaitForLocalExecution']
+          })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message || 'Sui RPC error');
+        const digest = data.result?.digest || data.result?.effects?.transactionDigest || '';
+        logEvent('rpc', `Sui TX Broadcasted: ${digest}`, 'success');
+        return digest;
+      } catch (e: any) {
+        throw new Error(`Sui Broadcast Failed: ${e.message}`);
+      }
     }
 
     // 3. EVM Broadcasting
@@ -294,9 +334,176 @@ export class BoltwalletCore {
       throw new Error(`EVM Broadcast Failed: ${e.message}`);
     }
   }
+
+  // ── QR Code & Contract Interaction Methods ─────────────────────
+
+  /**
+   * Execute a read-only (view/pure) contract method call.
+   * Does NOT require signing — uses the chain's public RPC.
+   */
+  async callContractRead(
+    contractAddress: string,
+    abiJson: string,
+    method: string,
+    args: any[],
+    chainId: string
+  ): Promise<any> {
+    const chainConfig = CHAINS[chainId as keyof typeof CHAINS];
+    if (!chainConfig) throw new Error(`Unknown chain: ${chainId}`);
+    const provider = getProvider(chainConfig.rpc);
+    if (!provider) throw new Error(`No RPC provider for ${chainConfig.name}`);
+
+    try {
+      const abi = JSON.parse(abiJson);
+      const contract = new ethers.Contract(contractAddress, abi, provider);
+      logEvent('rpc', `Calling ${method}() on ${contractAddress}`, 'info');
+      const result = await contract[method](...args);
+      logEvent('rpc', `${method}() returned successfully`, 'success');
+      return result;
+    } catch (e: any) {
+      logEvent('rpc', `Contract read failed: ${e.message}`, 'error');
+      throw new Error(`Contract read failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Execute a state-changing contract method call.
+   * Encodes the calldata, signs via the vault, and broadcasts.
+   */
+  async callContractWrite(
+    walletId: string,
+    contractAddress: string,
+    abiJson: string,
+    method: string,
+    args: any[],
+    chainId: string,
+    value?: string
+  ): Promise<string> {
+    const chainConfig = CHAINS[chainId as keyof typeof CHAINS];
+    if (!chainConfig) throw new Error(`Unknown chain: ${chainId}`);
+
+    try {
+      const abi = JSON.parse(abiJson);
+      const iface = new ethers.Interface(abi);
+      const data = iface.encodeFunctionData(method, args);
+
+      logEvent('security', `Encoding ${method}() calldata for signing...`, 'info');
+
+      const tx = {
+        to: contractAddress,
+        value: value || '0',
+        data: data,
+      };
+
+      const { signature } = await signTransaction(walletId, chainId, JSON.stringify(tx));
+      return await this.broadcastTransaction(chainId, signature);
+    } catch (e: any) {
+      logEvent('security', `Contract write failed: ${e.message}`, 'error');
+      throw new Error(`Contract write failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Parse an ABI JSON string and return a UI-friendly list of callable methods.
+   */
+  getContractMethods(abiJson: string) {
+    return parseABIMethods(abiJson);
+  }
+
+  /**
+   * Auto-fetch a verified ABI by contract address from Sourcify/Etherscan.
+   */
+  async fetchContractABI(contractAddress: string, chainId: string) {
+    logEvent('rpc', `Fetching ABI for ${contractAddress} on ${chainId}...`, 'info');
+    const result = await fetchABI(contractAddress, chainId);
+    if ('abi' in result) {
+      logEvent('rpc', `ABI fetched from ${result.source}: ${result.name}`, 'success');
+    } else {
+      logEvent('rpc', `ABI fetch failed: ${result.message}`, 'warning');
+    }
+    return result;
+  }
+
+  /**
+   * Export a stored contract as a QR code with IPFS CID encoding.
+   * The ABI is uploaded to IPFS and the QR encodes a compact boltxr:// URI.
+   */
+  async exportContractQR(address: string, chainId: string): Promise<{ dataUri: string; cid: string } | null> {
+    const contracts = await listContracts(chainId);
+    const contract = contracts.find((c: any) => c.address.toLowerCase() === address.toLowerCase());
+    if (!contract) {
+      logEvent('rpc', `Contract ${address} not found in vault`, 'error');
+      return null;
+    }
+
+    logEvent('rpc', `Generating QR for ${contract.name}...`, 'info');
+    const result = await generateContractQR(
+      contract.address,
+      contract.name,
+      contract.abi,
+      contract.decimals,
+      contract.chainId
+    );
+    logEvent('rpc', `QR generated with IPFS CID: ${result.cid}`, 'success');
+    return result;
+  }
+
+  /**
+   * Import a contract from a scanned QR payload string.
+   * Fetches the ABI from IPFS using the CID in the payload.
+   */
+  async importContractFromQR(rawPayload: string): Promise<ContractData | null> {
+    const payload = parseQRPayload(rawPayload);
+    if (!payload || payload.type !== 'contract') {
+      logEvent('rpc', 'Invalid QR payload — not a contract URI', 'error');
+      return null;
+    }
+
+    logEvent('rpc', `Importing contract ${payload.name} from QR...`, 'info');
+
+    // Fetch ABI from IPFS
+    let abiJson = payload.abiInline || null;
+    if (!abiJson) {
+      logEvent('rpc', `Fetching ABI from IPFS: ${payload.abiCid}...`, 'info');
+      abiJson = await fetchFromIPFS(payload.abiCid);
+    }
+
+    if (!abiJson) {
+      // Fallback: try auto-fetching from Sourcify/Etherscan
+      logEvent('rpc', 'IPFS fetch failed, trying auto-fetch...', 'warning');
+      const chainKey = Object.keys(CHAINS).find(
+        key => CHAINS[key].id === payload.chainId || CHAINS[key].chainId.toString() === payload.chainId
+      );
+      if (chainKey) {
+        const fetchResult = await fetchABI(payload.address, chainKey);
+        if ('abi' in fetchResult) {
+          abiJson = fetchResult.abi;
+        }
+      }
+    }
+
+    if (!abiJson) {
+      logEvent('rpc', 'Could not retrieve ABI from IPFS or verification sources', 'error');
+      return null;
+    }
+
+    const contractData = await importContract(
+      payload.name,
+      payload.address,
+      abiJson,
+      payload.decimals,
+      payload.chainId
+    );
+
+    logEvent('rpc', `Contract ${payload.name} imported successfully`, 'success');
+    return contractData;
+  }
 }
 
 // Crypto Helpers
+// SEC-02: Increased PBKDF2 iterations from 100K to 600K per OWASP 2023 guidance
+const PBKDF2_ITERATIONS = 600000;
+
 const deriveKey = async (password: string, salt: Uint8Array) => {
   const encoder = new TextEncoder();
   const passwordKey = await crypto.subtle.importKey(
@@ -310,7 +517,7 @@ const deriveKey = async (password: string, salt: Uint8Array) => {
     {
       name: 'PBKDF2',
       salt: salt as any,
-      iterations: 100000,
+      iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256'
     },
     passwordKey,
@@ -389,12 +596,65 @@ const validateTransactionPayload = (tx: any) => {
   }
 };
 
-const getVault = async (): Promise<VaultData> => {
-  if (typeof window === 'undefined') return initializeVault();
+// SEC-18: Full vault encryption — encrypt entire vault structure, not just mnemonic.
+// The vault is now stored as a single encrypted blob in localStorage.
+// Only the 'isSetup' flag and encryption params are stored in cleartext.
+interface EncryptedVaultEnvelope {
+  encrypted: string;   // AES-GCM encrypted JSON of VaultData
+  salt: string;
+  iv: string;
+  isSetup: boolean;
+}
+
+const getVaultEnvelope = (): EncryptedVaultEnvelope | null => {
+  if (typeof window === 'undefined') return null;
   const data = localStorage.getItem(VAULT_KEY);
-  if (data) {
-    return JSON.parse(data);
+  if (!data) return null;
+  try {
+    const parsed = JSON.parse(data);
+    // Migration: detect legacy vault format (has 'encryptedMnemonic' key)
+    if (parsed.encryptedMnemonic !== undefined) {
+      return null; // Will trigger legacy migration path
+    }
+    return parsed as EncryptedVaultEnvelope;
+  } catch {
+    return null;
   }
+};
+
+const getLegacyVault = (): VaultData | null => {
+  if (typeof window === 'undefined') return null;
+  const data = localStorage.getItem(VAULT_KEY);
+  if (!data) return null;
+  try {
+    const parsed = JSON.parse(data);
+    if (parsed.encryptedMnemonic !== undefined) return parsed as VaultData;
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const getVault = async (): Promise<VaultData> => {
+  // If we have a decrypted vault in the session, return it
+  // The vault is re-decrypted from storage each time for integrity
+  if (typeof window === 'undefined') return initializeVault();
+
+  const envelope = getVaultEnvelope();
+  if (envelope && envelope.isSetup && sessionPassword) {
+    try {
+      const decrypted = await decryptData(envelope.encrypted, envelope.salt, envelope.iv, sessionPassword);
+      return JSON.parse(decrypted);
+    } catch {
+      // Decryption failed — session password may be wrong
+      return initializeVault();
+    }
+  }
+
+  // Legacy migration: old format with only mnemonic encrypted
+  const legacy = getLegacyVault();
+  if (legacy) return legacy;
+
   return initializeVault();
 };
 
@@ -409,7 +669,6 @@ const initializeVault = () => {
     nfts: [],
     history: []
   };
-  saveVault(newData);
   return newData;
 };
 
@@ -417,39 +676,93 @@ export const setupVault = async (password: string): Promise<string> => {
   const wallet = ethers.Wallet.createRandom();
   const mnemonic = wallet.mnemonic?.phrase || '';
   if (!mnemonic) throw new Error('Failed to generate mnemonic');
-  const encrypted = await encryptData(mnemonic, password);
 
-  const vault = await getVault();
-  vault.encryptedMnemonic = encrypted.encrypted;
-  vault.salt = encrypted.salt;
-  vault.iv = encrypted.iv;
-  vault.isEncrypted = true;
+  const vault: VaultData = {
+    encryptedMnemonic: '', // No longer used — mnemonic stored in vault body
+    salt: '',
+    iv: '',
+    isEncrypted: true,
+    wallets: [],
+    contracts: [],
+    nfts: [],
+    history: []
+  };
+  // Store mnemonic inside the vault structure itself
+  (vault as any).__mnemonic = mnemonic;
 
-  await saveVault(vault);
   sessionMnemonic = mnemonic;
+  sessionPassword = password;
+  touchSession();
+  await saveVault(vault);
   return mnemonic;
 };
 
 export const unlockVault = async (password: string): Promise<boolean> => {
-  const vault = await getVault();
-  if (!vault.isEncrypted) return false;
-  try {
-    sessionMnemonic = await decryptData(vault.encryptedMnemonic, vault.salt, vault.iv, password);
-    return true;
-  } catch (e) {
-    return false;
+  // Try new encrypted envelope format first
+  const envelope = getVaultEnvelope();
+  if (envelope && envelope.isSetup) {
+    try {
+      const decrypted = await decryptData(envelope.encrypted, envelope.salt, envelope.iv, password);
+      const vault = JSON.parse(decrypted);
+      sessionMnemonic = vault.__mnemonic || null;
+      sessionPassword = password;
+      touchSession();
+      return !!sessionMnemonic;
+    } catch {
+      return false;
+    }
   }
+
+  // Legacy fallback: old format with encryptedMnemonic
+  const legacy = getLegacyVault();
+  if (legacy && legacy.isEncrypted) {
+    try {
+      sessionMnemonic = await decryptData(legacy.encryptedMnemonic, legacy.salt, legacy.iv, password);
+      sessionPassword = password;
+      touchSession();
+      // Migrate legacy vault to new encrypted format
+      (legacy as any).__mnemonic = sessionMnemonic;
+      await saveVault(legacy);
+      logEvent('security', 'Vault migrated to full-encryption format', 'success');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 };
 
-export const isVaultLocked = () => !sessionMnemonic;
+export const isVaultLocked = () => {
+  if (isSessionExpired()) return true;
+  return !sessionMnemonic;
+};
+
 export const isVaultSetup = async () => {
-  const vault = await getVault();
-  return vault.isEncrypted;
+  const envelope = getVaultEnvelope();
+  if (envelope) return envelope.isSetup;
+  const legacy = getLegacyVault();
+  if (legacy) return legacy.isEncrypted;
+  return false;
 };
 
 const saveVault = async (data: VaultData) => {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(VAULT_KEY, JSON.stringify(data));
+  if (!sessionPassword) {
+    // Fallback: save as legacy format if no session password
+    localStorage.setItem(VAULT_KEY, JSON.stringify(data));
+    return;
+  }
+  // SEC-18: Encrypt the entire vault structure
+  const vaultJson = JSON.stringify(data);
+  const encrypted = await encryptData(vaultJson, sessionPassword);
+  const envelope: EncryptedVaultEnvelope = {
+    encrypted: encrypted.encrypted,
+    salt: encrypted.salt,
+    iv: encrypted.iv,
+    isSetup: true,
+  };
+  localStorage.setItem(VAULT_KEY, JSON.stringify(envelope));
 };
 
 let logs: LogEvent[] = [];
@@ -582,7 +895,9 @@ export const listWallets = async (chainId: string = 'ethereum'): Promise<any[]> 
 };
 
 export const signTransaction = async (walletId: string, chainId: string, txHex: string): Promise<any> => {
-  if (!sessionMnemonic) throw new Error("Vault is locked");
+  // SEC-01: Check session expiry before signing
+  if (isSessionExpired() || !sessionMnemonic) throw new Error("Vault is locked");
+  touchSession();
   logEvent('security', `Signing transaction for ${chainId}...`, 'info');
   
   const vault = await getVault();
@@ -591,7 +906,10 @@ export const signTransaction = async (walletId: string, chainId: string, txHex: 
 
   try {
     const txParams = JSON.parse(txHex);
-    validateTransactionPayload(txParams);
+    // Skip EVM-specific validation for non-EVM chains
+    if (chainId !== 'sui') {
+      validateTransactionPayload(txParams);
+    }
 
     const basePath = DERIVATION_PATHS[chainId] || "m/44'/60'/0'/0/";
     const fullPath = basePath.endsWith('/') ? `${basePath}${w.index}` : `${basePath}/${w.index}`;
@@ -611,24 +929,90 @@ export const signTransaction = async (walletId: string, chainId: string, txHex: 
       return { signature: psbt.extractTransaction().toHex() };
     }
 
-    // 2. Sui Signing (Ed25519 — native, preserved)
+    // 2. SEC-05 FIX: True Sui Signing (Ed25519 — real transaction signing)
     if (chainId === 'sui') {
       const keypair = Ed25519Keypair.deriveKeypair(sessionMnemonic, fullPath);
-      logEvent('security', `Sui transaction signed natively`, 'success');
-      return { signature: "sui_sig_" + Buffer.from(keypair.getPublicKey().toRawBytes()).toString('hex') };
+      const senderAddr = keypair.getPublicKey().toSuiAddress();
+
+      // Build a Sui Transaction from txParams
+      const suiTx = new Transaction();
+      suiTx.setSender(senderAddr);
+
+      if (txParams.to && txParams.value) {
+        // SUI transfer: split coins and transfer
+        const amountMist = BigInt(Math.floor(parseFloat(txParams.value) * 1_000_000_000));
+        const [coin] = suiTx.splitCoins(suiTx.gas, [amountMist]);
+        suiTx.transferObjects([coin], txParams.to);
+      } else if (txParams.moveCall) {
+        // Move function call
+        suiTx.moveCall({
+          target: txParams.moveCall.target,
+          arguments: (txParams.moveCall.arguments || []).map((arg: any) =>
+            typeof arg === 'string' ? suiTx.pure.string(arg) : suiTx.pure.u64(arg)
+          ),
+        });
+      }
+
+      // Set gas budget
+      suiTx.setGasBudget(txParams.gasBudget || 10_000_000);
+
+      // Build and sign the transaction bytes
+      const rpcUrl = chainConfig?.rpc || 'https://rpc.ankr.com/sui';
+      const txBytes = await suiTx.build({ client: { url: rpcUrl } as any });
+      const { signature: suiSig } = await keypair.signTransaction(txBytes);
+
+      logEvent('security', `Sui transaction signed natively (Ed25519)`, 'success');
+
+      // Return base64-encoded transaction bytes + signature for broadcast
+      const txBase64 = Buffer.from(txBytes).toString('base64');
+      return { signature: suiSig, txBytes: txBase64 };
     }
 
     // 3. EVM Signing (REAL — ethers v6 HDNodeWallet)
     const hdWallet = ethers.HDNodeWallet.fromPhrase(sessionMnemonic, undefined, fullPath, wordlist);
     const wallet = new ethers.Wallet(hdWallet.privateKey);
 
+    // SEC-04 FIX: Fetch live nonce and estimate gas instead of defaulting
+    const provider = getProvider(chainConfig?.rpc || '');
+    let liveNonce = txParams.nonce;
+    let liveGasLimit = txParams.gasLimit;
+    let liveGasPrice = txParams.gasPrice;
+
+    if (provider) {
+      try {
+        if (liveNonce === undefined || liveNonce === 0) {
+          liveNonce = await provider.getTransactionCount(hdWallet.address, 'pending');
+        }
+        if (!liveGasLimit || liveGasLimit === 21000) {
+          try {
+            const estimated = await provider.estimateGas({
+              to: txParams.to,
+              value: txParams.value ? ethers.parseEther(txParams.value.toString()) : 0,
+              data: txParams.data || '0x',
+              from: hdWallet.address,
+            });
+            // Add 20% buffer for safety
+            liveGasLimit = (estimated * 120n / 100n).toString();
+          } catch {
+            liveGasLimit = txParams.data && txParams.data !== '0x' ? 200000 : 21000;
+          }
+        }
+        if (!liveGasPrice) {
+          const feeData = await provider.getFeeData();
+          liveGasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+        }
+      } catch (e: any) {
+        logEvent('rpc', `Live gas/nonce fetch warning: ${e.message}`, 'warning');
+      }
+    }
+
     const signature = await wallet.signTransaction({
       to: txParams.to,
       value: txParams.value ? ethers.parseEther(txParams.value.toString()) : 0,
       data: txParams.data || '0x',
-      nonce: txParams.nonce || 0,
-      gasLimit: txParams.gasLimit || 21000,
-      gasPrice: txParams.gasPrice || ethers.parseUnits('1', 'gwei'),
+      nonce: liveNonce ?? 0,
+      gasLimit: liveGasLimit || 21000,
+      gasPrice: liveGasPrice || ethers.parseUnits('1', 'gwei'),
       chainId: Number(chainConfig?.chainId || chainConfig?.id || 1)
     });
 
@@ -757,9 +1141,41 @@ export const getContractBalance = async (contractAddress: string, walletAddress:
 };
 
 export const importContract = async (name: string, address: string, abi: string, decimals: number, chainId: string) => {
+  // SEC-09: Checksum-validate EVM addresses
+  let checksumAddr = address;
+  try {
+    if (address.startsWith('0x') && address.length === 42) {
+      checksumAddr = ethers.getAddress(address);
+    }
+  } catch (e: any) {
+    throw new Error(`Invalid contract address: ${e.message}`);
+  }
+
+  // SEC-14: Validate ABI is a parseable JSON array
+  try {
+    const parsed = JSON.parse(abi);
+    if (!Array.isArray(parsed)) throw new Error('ABI must be a JSON array');
+  } catch (e: any) {
+    throw new Error(`Invalid ABI format: ${e.message}`);
+  }
+
   const vault = await getVault();
   if (!vault.contracts) vault.contracts = [];
-  const newContract = { name, address, abi, decimals, chainId };
+
+  // SEC-11: Duplicate contract guard — prevent importing same address+chain twice
+  const existing = vault.contracts.find(
+    (c: any) => c.address.toLowerCase() === checksumAddr.toLowerCase() && c.chainId === chainId
+  );
+  if (existing) {
+    logEvent('rpc', `Contract ${checksumAddr} already imported on ${chainId} — updating`, 'info');
+    existing.name = name;
+    existing.abi = abi;
+    existing.decimals = decimals;
+    await saveVault(vault);
+    return existing;
+  }
+
+  const newContract = { name, address: checksumAddr, abi, decimals, chainId };
   vault.contracts.push(newContract);
   await saveVault(vault);
   return newContract;
@@ -827,16 +1243,26 @@ export const getHistory = async (address: string, chainId: string): Promise<Hist
 };
 
 export const resetVault = async (mnemonic: string, pass: string): Promise<void> => {
-  const encrypted = await encryptData(mnemonic, pass);
-  const vault = await getVault();
-  vault.encryptedMnemonic = encrypted.encrypted;
-  vault.salt = encrypted.salt;
-  vault.iv = encrypted.iv;
-  vault.isEncrypted = true;
-  vault.wallets = [];
-  vault.history = [];
-  await saveVault(vault);
+  const vault: VaultData = {
+    encryptedMnemonic: '',
+    salt: '',
+    iv: '',
+    isEncrypted: true,
+    wallets: [],
+    contracts: [],
+    nfts: [],
+    history: []
+  };
+  (vault as any).__mnemonic = mnemonic;
   sessionMnemonic = mnemonic;
+  sessionPassword = pass;
+  touchSession();
+  await saveVault(vault);
 };
 
-export const getSessionMnemonic = () => sessionMnemonic;
+export const getSessionMnemonic = () => {
+  // SEC-03: Check session expiry before exposing mnemonic
+  if (isSessionExpired()) return null;
+  touchSession();
+  return sessionMnemonic;
+};

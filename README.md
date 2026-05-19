@@ -47,6 +47,21 @@ npm install
 npm run dev
 ```
 
+### Desktop XR Emulation
+For local desktop testing without a headset, enable Meta IWER through a local-only environment file:
+
+```bash
+NEXT_PUBLIC_ENABLE_XR_EMULATION=true
+```
+
+Keep this in `.env.local`; `.env*` files are ignored so the flag is not distributed. The app installs the emulated Meta Quest 3 WebXR runtime only when native `navigator.xr` is unavailable. To explicitly override native WebXR during debugging, add:
+
+```bash
+NEXT_PUBLIC_FORCE_XR_EMULATION=true
+```
+
+Do not enable either flag for production, Electron release builds, or headset validation builds.
+
 ### Electron Distribution
 ```bash
 # Build for desktop release

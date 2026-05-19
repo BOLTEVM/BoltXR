@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, QrCode, FileCode2 } from 'lucide-react';
 
 interface HUDSystemProps {
   status: string;
@@ -10,6 +10,8 @@ interface HUDSystemProps {
   onToggleMode: () => void;
   onExit: () => void;
   onOpenSettings: () => void;
+  onOpenQR?: () => void;
+  onOpenContracts?: () => void;
 }
 
 const HUDSystem: React.FC<HUDSystemProps> = ({
@@ -21,6 +23,8 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
   onToggleMode,
   onExit,
   onOpenSettings,
+  onOpenQR,
+  onOpenContracts,
 }) => {
   return (
     <>
@@ -39,6 +43,16 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
         <div className="settings-trigger" onClick={(e) => { e.stopPropagation(); onOpenSettings(); }}>
           <Settings size={14} />
         </div>
+        {onOpenQR && (
+          <div className="settings-trigger" onClick={(e) => { e.stopPropagation(); onOpenQR(); }} title="QR Terminal">
+            <QrCode size={14} />
+          </div>
+        )}
+        {onOpenContracts && (
+          <div className="settings-trigger" onClick={(e) => { e.stopPropagation(); onOpenContracts(); }} title="Contracts">
+            <FileCode2 size={14} />
+          </div>
+        )}
       </div>
 
       <div className="hud" style={{ top: 20, left: 20 }}>

@@ -5,29 +5,63 @@ import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
 import { Settings } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
+import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
 import Scene from './Scene';
-import LandingPage from './LandingPage';
 
 const store = createXRStore();
+
+type NavigatorWithXR = Navigator & {
+    xr?: {
+        isSessionSupported: (mode: 'immersive-vr' | 'immersive-ar') => Promise<boolean>;
+    };
+};
 
 export default function WalletXR({ onExit }: { onExit: () => void }) {
     const { setShowSettings } = useSettings();
     const [mounted, setMounted] = useState(false);
     const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
+    const [emulationEnabled, setEmulationEnabled] = useState(false);
 
     useEffect(() => {
-        setMounted(true);
-        
-        // Check WebXR support
-        if (typeof navigator !== 'undefined' && (navigator as any).xr) {
-            const xr = (navigator as any).xr;
-            Promise.all([
-                xr.isSessionSupported('immersive-vr'),
-                xr.isSessionSupported('immersive-ar')
-            ]).then(([vr, ar]) => {
-                setXrSupport({ vr, ar });
-            });
-        }
+        let cancelled = false;
+
+        const initialize = async () => {
+            const emulation = await initXrEmulation();
+
+            if (cancelled) return;
+            setEmulationEnabled(emulation.enabled);
+
+            // Check WebXR support after optional dev-only emulation is installed.
+            const xr = typeof navigator !== 'undefined'
+                ? (navigator as NavigatorWithXR).xr
+                : undefined;
+
+            if (xr) {
+                const [vr, ar] = await Promise.all([
+                    xr.isSessionSupported('immersive-vr'),
+                    xr.isSessionSupported('immersive-ar')
+                ]);
+
+                if (!cancelled) {
+                    setXrSupport({ vr, ar });
+                }
+            }
+
+            if (!cancelled) {
+                setMounted(true);
+            }
+        };
+
+        initialize().catch((error) => {
+            console.warn('XR emulation initialization failed:', error);
+            if (!cancelled) {
+                setMounted(true);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     if (!mounted) return null;
@@ -81,6 +115,11 @@ export default function WalletXR({ onExit }: { onExit: () => void }) {
                 </div>
                 {!xrSupport.vr && !xrSupport.ar && (
                     <p className="text-[10px] text-red-400 text-center font-medium">WebXR not supported on this device/browser.</p>
+                )}
+                {shouldAttemptXrEmulation() && (
+                    <p className={`text-[10px] text-center font-bold uppercase tracking-widest ${emulationEnabled ? 'text-amber-300' : 'text-gray-500'}`}>
+                        {emulationEnabled ? 'XR Emulation' : 'Native WebXR'}
+                    </p>
                 )}
             </div>
 

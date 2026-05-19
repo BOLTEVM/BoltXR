@@ -8,12 +8,16 @@ import HandOverlay from './HandOverlay';
 import HUDSystem from './HUDSystem';
 import InteractionSystem from './InteractionSystem';
 import WalletOverlaySystem from './WalletOverlaySystem';
+import QRPanel from './QRPanel';
+import ContractManager from './ContractManager';
 import { useSettings } from '../hooks/useSettings';
+import { useWallet } from '../hooks/useWallet';
 import { FRAMEWORK_BUTTONS, GENERIC_BUTTONS, Rect, ButtonDef } from '../lib/constants';
 import { lovense } from '../lib/lovense';
 
 const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const { setShowSettings, modelComplexity } = useSettings();
+  const { account } = useWallet();
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const modalCloseRef = useRef<HTMLDivElement>(null);
@@ -31,6 +35,10 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
   const [dropdownAnchor, setDropdownAnchor] = useState<Rect | null>(null);
   const [toasts, setToasts] = useState<{ id: number; message: string; color: string }[]>([]);
   const toastIdRef = useRef(0);
+
+  // QR & Contract Panel State
+  const [showQRPanel, setShowQRPanel] = useState(false);
+  const [showContractManager, setShowContractManager] = useState(false);
 
   // Initialize button rects
   const computeInitialRects = useCallback((btns: ButtonDef[]) => {
@@ -157,6 +165,8 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
           onExit();
         }}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenQR={() => setShowQRPanel(true)}
+        onOpenContracts={() => setShowContractManager(true)}
       />
 
       <InteractionSystem
@@ -176,6 +186,29 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         onClose={handleClose}
         modalCloseRef={modalCloseRef}
         drawerCloseRef={drawerCloseRef}
+      />
+
+      {/* QR Panel Overlay (2D) */}
+      <QRPanel
+        address={account}
+        isOpen={showQRPanel}
+        onClose={() => setShowQRPanel(false)}
+        onContractScanned={(payload) => {
+          setShowQRPanel(false);
+          setShowContractManager(true);
+        }}
+      />
+
+      {/* Contract Manager Overlay (2D) */}
+      <ContractManager
+        chainId="ethereum"
+        walletId={account}
+        isOpen={showContractManager}
+        onClose={() => setShowContractManager(false)}
+        onOpenQRScanner={() => {
+          setShowContractManager(false);
+          setShowQRPanel(true);
+        }}
       />
     </div>
   );

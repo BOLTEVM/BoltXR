@@ -1,14 +1,34 @@
 'use client';
 
-import { Text, useTexture } from '@react-three/drei';
+import { useState } from 'react';
+import { Text, useTexture, RoundedBox } from '@react-three/drei';
+import { Interactive } from '@react-three/xr';
 
 interface DashboardProps {
     account: string | null;
     isLocked?: boolean;
     onConnect: () => void;
+    onShowQR?: () => void;
+    onShowContracts?: () => void;
 }
 
-export default function Dashboard({ account, isLocked, onConnect }: DashboardProps) {
+function DashBtn({ label, onClick, position, color }: { label: string; onClick: () => void; position: [number, number, number]; color: string }) {
+    const [hovered, setHovered] = useState(false);
+    return (
+        <Interactive onSelect={onClick}>
+            <group position={position} onPointerDown={onClick} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+                <RoundedBox args={[0.5, 0.15, 0.02]} radius={0.02} smoothness={4} scale={hovered ? 1.05 : 1}>
+                    <meshStandardMaterial color={hovered ? "#fff" : color} emissive={hovered ? "#fff" : color} emissiveIntensity={hovered ? 0.5 : 0.2} metalness={0.8} roughness={0.2} />
+                </RoundedBox>
+                <Text position={[0, 0, 0.02]} fontSize={0.04} color={hovered ? "black" : "white"} anchorX="center" anchorY="middle">
+                    {label}
+                </Text>
+            </group>
+        </Interactive>
+    );
+}
+
+export default function Dashboard({ account, isLocked, onConnect, onShowQR, onShowContracts }: DashboardProps) {
     const logoTexture = useTexture('/0logov3.png');
 
     return (
@@ -45,9 +65,15 @@ export default function Dashboard({ account, isLocked, onConnect }: DashboardPro
             </Text>
 
             {account ? (
-                <Text position={[0, -0.4, 0.02]} fontSize={0.08} color="#10b981" anchorX="center">
-                    {account.slice(0, 6)}...{account.slice(-4)}
-                </Text>
+                <>
+                    <Text position={[0, -0.35, 0.02]} fontSize={0.08} color="#10b981" anchorX="center">
+                        {account.slice(0, 6)}...{account.slice(-4)}
+                    </Text>
+                    <group position={[0, -0.55, 0.02]}>
+                        {onShowQR && <DashBtn label="QR" onClick={onShowQR} position={[-0.32, 0, 0]} color="#a855f7" />}
+                        {onShowContracts && <DashBtn label="CONTRACTS" onClick={onShowContracts} position={[0.32, 0, 0]} color="#10b981" />}
+                    </group>
+                </>
             ) : (
                 <group position={[0, -0.4, 0.02]} onClick={onConnect}>
                      <mesh>
