@@ -9,10 +9,11 @@
  */
 
 import QRCode from 'qrcode';
+import { Interface } from 'ethers';
+import { CHAINS, resolveChainKey } from './boltows/chains';
 
 // ── URI Scheme Constants ─────────────────────────────────────────
 
-const BOLTXR_SCHEME = 'boltxr://';
 const BOLTXR_CONTRACT_PREFIX = 'boltxr://contract';
 const ETHEREUM_SCHEME = 'ethereum:';
 
@@ -30,8 +31,8 @@ export interface QRContractPayload {
   name: string;
   decimals: number;
   chainId: string;
-  /** IPFS CID pointing to the full ABI JSON */
-  abiCid: string;
+  /** IPFS CID pointing to the full ABI JSON (optional when the ABI is embedded) */
+  abiCid?: string;
   /** Optional inline ABI for small contracts (fallback if IPFS unavailable) */
   abiInline?: string;
 }
@@ -48,51 +49,42 @@ const IPFS_GATEWAYS = [
 ];
 
 /**
- * Upload JSON data to IPFS via a public pinning service.
- * Uses the nft.storage/web3.storage-compatible API pattern.
- * Falls back to a deterministic CID generation for offline/testing.
+ * Pin JSON data to IPFS via Pinata when a JWT is configured
+ * (NEXT_PUBLIC_PINATA_JWT). Returns null when pinning is unavailable —
+ * callers then embed the ABI in the QR or rely on verified-source lookup.
  */
-export async function uploadToIPFS(data: string): Promise<string> {
-  // Try Pinata public gateway first (no API key needed for small payloads)
+export async function uploadToIPFS(data: string): Promise<string | null> {
+  const jwt = process.env.NEXT_PUBLIC_PINATA_JWT;
+  if (!jwt) return null;
   try {
     const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${jwt}`,
       },
       body: JSON.stringify({
         pinataContent: JSON.parse(data),
-        pinataMetadata: {
-          name: `boltxr-contract-${Date.now()}`,
-        },
+        pinataMetadata: { name: `boltxr-contract-${Date.now()}` },
       }),
+      signal: AbortSignal.timeout(15000),
     });
-
-    if (response.ok) {
-      const result = await response.json();
-      return result.IpfsHash;
-    }
+    if (!response.ok) return null;
+    const result = await response.json();
+    return typeof result.IpfsHash === 'string' ? result.IpfsHash : null;
   } catch {
-    // Fall through to local CID generation
+    return null;
   }
-
-  // Fallback: Generate a deterministic hash-based pseudo-CID for offline use.
-  // The ABI can still be stored locally in the vault alongside the CID.
-  const encoder = new TextEncoder();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-  const hashArray = new Uint8Array(hashBuffer);
-  let hex = '';
-  for (let i = 0; i < hashArray.length; i++) {
-    hex += hashArray[i].toString(16).padStart(2, '0');
-  }
-  // Return a pseudo-CID with "Qm" prefix to maintain format compatibility
-  return `QmLocal${hex.substring(0, 40)}`;
 }
+
+const CID_PATTERN = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/;
 
 /**
  * Fetch JSON content from IPFS using multiple gateway fallbacks.
  */
 export async function fetchFromIPFS(cid: string): Promise<string | null> {
+  // Skip malformed or legacy locally-generated pseudo-CIDs ("QmLocal...").
+  if (!CID_PATTERN.test(cid)) return null;
   for (const gateway of IPFS_GATEWAYS) {
     try {
       const response = await fetch(`${gateway}${cid}`, {
@@ -110,6 +102,20 @@ export async function fetchFromIPFS(cid: string): Promise<string | null> {
 
 // ── QR Code Generation ──────────────────────────────────────────
 
+const QR_COLORS = { dark: '#020617', light: '#FFFFFF' };
+
+/** Build the payload encoded in an address QR (EIP-681 for EVM chains). */
+export function buildAddressPayload(address: string, chainKey?: string): string {
+  const chain = chainKey ? CHAINS[chainKey] : undefined;
+  if (address.startsWith('0x') && (!chain || chain.kind === 'evm')) {
+    // EIP-681 requires a numeric chain id.
+    const numericId = chain && chain.chainId > 0 ? `@${chain.chainId}` : '';
+    return `${ETHEREUM_SCHEME}${address}${numericId}`;
+  }
+  if (chain?.kind === 'bitcoin') return `bitcoin:${address}`;
+  return address;
+}
+
 /**
  * Generate a QR code data URI for a wallet address.
  * Optionally wraps in EIP-681 `ethereum:` scheme for cross-wallet compatibility.
@@ -120,29 +126,79 @@ export async function generateAddressQR(
 ): Promise<string> {
   const { eip681 = false, chainId, size = 256 } = options || {};
 
-  let payload = address;
-  if (eip681 && address.startsWith('0x')) {
-    payload = `${ETHEREUM_SCHEME}${address}`;
-    if (chainId) {
-      payload += `@${chainId}`;
-    }
-  }
+  const payload = eip681 ? buildAddressPayload(address, resolveChainKey(chainId) || undefined) : address;
 
   return QRCode.toDataURL(payload, {
     width: size,
     margin: 2,
-    color: {
-      dark: '#FFFFFF',
-      light: '#00000000', // Transparent background for glassmorphic overlay
-    },
+    // Dark modules on a light field: inverted codes fail on many phone scanners.
+    color: QR_COLORS,
     errorCorrectionLevel: 'M',
   });
 }
 
+/** Max URI length we will encode (keeps QR density scannable). */
+const MAX_QR_URI_LENGTH = 1800;
+
+const toBase64Url = (text: string) => {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
+const fromBase64Url = (text: string) => {
+  const padded = text.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((text.length + 3) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+};
+
+/** Compact an ABI to human-readable function signatures. */
+const compactAbi = (abi: string): string | null => {
+  try {
+    const iface = new Interface(JSON.parse(abi));
+    const fns: string[] = [];
+    iface.forEachFunction(fn => { fns.push(fn.format('minimal')); });
+    return JSON.stringify(fns);
+  } catch {
+    return null;
+  }
+};
+
 /**
- * Generate a QR code for sharing a smart contract via IPFS CID.
- * The ABI is uploaded to IPFS and the QR encodes a compact boltxr:// URI.
+ * Generate a QR code for sharing a smart contract.
+ * The ABI's function signatures are embedded directly when they fit; otherwise
+ * the ABI is pinned to IPFS (if configured) and referenced by CID. As a last
+ * resort the receiver looks the ABI up from verified sources by address.
  */
+export async function buildContractURI(
+  address: string,
+  name: string,
+  abi: string,
+  decimals: number,
+  chainId: string
+): Promise<{ uri: string; cid: string }> {
+  const params = new URLSearchParams({
+    addr: address,
+    name: name,
+    dec: decimals.toString(),
+    chain: chainId,
+  });
+
+  const compact = compactAbi(abi);
+  if (compact) {
+    const withAbi = new URLSearchParams(params);
+    withAbi.set('abi', toBase64Url(compact));
+    const uri = `${BOLTXR_CONTRACT_PREFIX}?${withAbi.toString()}`;
+    if (uri.length <= MAX_QR_URI_LENGTH) return { uri, cid: '' };
+  }
+
+  const cid = (await uploadToIPFS(abi)) || '';
+  if (cid) params.set('cid', cid);
+  return { uri: `${BOLTXR_CONTRACT_PREFIX}?${params.toString()}`, cid };
+}
+
 export async function generateContractQR(
   address: string,
   name: string,
@@ -150,34 +206,18 @@ export async function generateContractQR(
   decimals: number,
   chainId: string,
   options?: { size?: number }
-): Promise<{ dataUri: string; cid: string }> {
+): Promise<{ dataUri: string; cid: string; uri: string }> {
   const { size = 256 } = options || {};
-
-  // Upload ABI to IPFS
-  const cid = await uploadToIPFS(abi);
-
-  // Build the compact URI
-  const params = new URLSearchParams({
-    addr: address,
-    name: name,
-    dec: decimals.toString(),
-    chain: chainId,
-    cid: cid,
-  });
-
-  const uri = `${BOLTXR_CONTRACT_PREFIX}?${params.toString()}`;
+  const { uri, cid } = await buildContractURI(address, name, abi, decimals, chainId);
 
   const dataUri = await QRCode.toDataURL(uri, {
     width: size,
     margin: 2,
-    color: {
-      dark: '#FFFFFF',
-      light: '#00000000',
-    },
+    color: QR_COLORS,
     errorCorrectionLevel: 'M',
   });
 
-  return { dataUri, cid };
+  return { dataUri, cid, uri };
 }
 
 // ── QR Payload Parsing ──────────────────────────────────────────
@@ -203,16 +243,28 @@ export function parseQRPayload(raw: string): QRPayload | null {
       const dec = url.searchParams.get('dec');
       const chain = url.searchParams.get('chain');
       const cid = url.searchParams.get('cid');
+      const abi = url.searchParams.get('abi');
 
-      if (!addr || !name || !chain || !cid) return null;
+      if (!addr || !name || !chain) return null;
+      if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) return null;
 
+      let abiInline: string | undefined;
+      if (abi) {
+        try {
+          const decoded = fromBase64Url(abi);
+          if (Array.isArray(JSON.parse(decoded))) abiInline = decoded;
+        } catch { /* ignore malformed embedded ABI */ }
+      }
+
+      const decimals = parseInt(dec || '18', 10);
       return {
         type: 'contract',
         address: addr,
-        name: name,
-        decimals: parseInt(dec || '18', 10),
+        name: name.slice(0, 64),
+        decimals: Number.isFinite(decimals) ? decimals : 18,
         chainId: chain,
-        abiCid: cid,
+        abiCid: cid || undefined,
+        abiInline,
       };
     } catch {
       return null;
@@ -228,6 +280,12 @@ export function parseQRPayload(raw: string): QRPayload | null {
       address: addressPart,
       chainId: chainMatch ? chainMatch[1] : undefined,
     };
+  }
+
+  // 2b. BIP21 bitcoin: URI
+  if (trimmed.toLowerCase().startsWith('bitcoin:')) {
+    const addressPart = trimmed.slice('bitcoin:'.length).split('?')[0];
+    return { type: 'address', address: addressPart, chainId: 'bitcoin' };
   }
 
   // 3. Plain EVM address
@@ -267,10 +325,7 @@ export async function generateQRCanvas(
   await QRCode.toCanvas(canvas, data, {
     width: size,
     margin: 2,
-    color: {
-      dark: '#FFFFFF',
-      light: '#0f172a',
-    },
+    color: QR_COLORS,
     errorCorrectionLevel: 'M',
   });
 
