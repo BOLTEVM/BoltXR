@@ -251,11 +251,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     useEffect(() => {
         if (status !== 'unlocked' || !activeWallet) return;
-        refresh();
+        const first = setTimeout(refresh, 0);
         const id = setInterval(() => {
             if (document.visibilityState === 'visible') refresh();
         }, BALANCE_REFRESH_MS);
-        return () => clearInterval(id);
+        return () => {
+            clearTimeout(first);
+            clearInterval(id);
+        };
     }, [status, activeWallet, refresh]);
 
     const refreshHistory = useCallback(async () => {

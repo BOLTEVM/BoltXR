@@ -1,284 +1,223 @@
 'use client';
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSettings } from '../hooks/useSettings';
-import { Settings, Cpu, Layers, X, Info, Zap, Link } from 'lucide-react';
+import React, { useState, useSyncExternalStore } from 'react';
+import { Settings, Cpu, Layers, Zap, Link, ShieldCheck, Lock, Eye, Box, Hand } from 'lucide-react';
+import Dialog from './ui/Dialog';
+import PinEntry from './ui/PinEntry';
+import { useSettings, AppStack } from '../hooks/useSettings';
+import { useWallet } from '../hooks/useWallet';
 import { lovense } from '../lib/lovense';
+import { APP_VERSION } from '../lib/app-info';
+
+const STACKS: { id: AppStack; label: string; desc: string; icon: typeof Box }[] = [
+  { id: 'XR', label: 'Spatial XR', desc: 'WebXR · VR / AR / desktop 3D', icon: Box },
+  { id: '2D', label: 'Hand Tracking', desc: 'Webcam · MediaPipe gestures', icon: Hand },
+];
+
+const subscribeLovense = (cb: () => void) => lovense.subscribe(cb);
+const getLovenseConnected = () => lovense.getIsConnected();
+const getLovenseServer = () => false;
+
+function RecoveryPhraseReveal() {
+  const { revealMnemonic, lockoutUntil } = useWallet();
+  const [open, setOpen] = useState(false);
+  const [pin, setPin] = useState('');
+  const [phrase, setPhrase] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => { setOpen(false); setPin(''); setPhrase(null); setError(null); };
+
+  const submit = async () => {
+    if (pin.length < 4 || busy) return;
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      setError('Too many attempts — try again shortly');
+      return;
+    }
+    setBusy(true);
+    const result = await revealMnemonic(pin);
+    setBusy(false);
+    setPin('');
+    if (result) setPhrase(result);
+    else setError('Incorrect PIN');
+  };
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}>
+        <Eye size={14} /> Show recovery phrase
+      </button>
+    );
+  }
+
+  if (phrase) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="notice notice-warning">Never share these words. Anyone with them controls your funds.</div>
+        <ol className="grid grid-cols-3 gap-2">
+          {phrase.split(' ').map((word, i) => (
+            <li key={i} className="card px-2 py-1.5 mono text-[11px] flex gap-1.5">
+              <span className="text-slate-500">{i + 1}.</span>{word}
+            </li>
+          ))}
+        </ol>
+        <button type="button" className="btn btn-sm self-end" onClick={reset}>Hide</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-slate-400">Re-enter your PIN to view the recovery phrase.</p>
+      <PinEntry value={pin} onChange={v => { setPin(v); setError(null); }} onSubmit={submit} disabled={busy} error={!!error} placeholderLength={6} />
+      {error && <div className="notice notice-danger" role="alert">{error}</div>}
+      <div className="grid grid-cols-2 gap-3">
+        <button type="button" className="btn btn-sm" onClick={reset}>Cancel</button>
+        <button type="button" className="btn btn-sm btn-primary" onClick={submit} disabled={busy || pin.length < 4}>Reveal</button>
+      </div>
+    </div>
+  );
+}
 
 const SettingsMenu: React.FC = () => {
-  const { 
-    showSettings, 
-    setShowSettings, 
-    activeStack, 
-    setActiveStack, 
-    modelComplexity, 
+  const {
+    showSettings,
+    setShowSettings,
+    activeStack,
+    setActiveStack,
+    modelComplexity,
     setModelComplexity,
     hapticsEnabled,
     setHapticsEnabled,
     lovenseToken,
     setLovenseToken
   } = useSettings();
-
-  if (!showSettings) return null;
+  const wallet = useWallet();
+  const lovenseConnected = useSyncExternalStore(subscribeLovense, getLovenseConnected, getLovenseServer);
 
   return (
-    <AnimatePresence>
-      <motion.div 
-        className="settings-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      >
-        <motion.div 
-          className="settings-card"
-          initial={{ scale: 0.9, opacity: 0, y: 20 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 20 }}
-        >
-          <div className="settings-header">
-            <div className="flex items-center gap-3">
-              <Settings className="text-purple-400 h-5 w-5" />
-              <span className="text-xl font-bold tracking-tight">SYSTEM CONFIG</span>
-            </div>
-            <button onClick={() => setShowSettings(false)} className="close-icon">
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="settings-body">
-            {/* STACK SELECTION */}
-            <div className="settings-section">
-              <div className="section-title">
-                <Layers size={14} className="mr-2" /> INTERFACE STACK
-              </div>
-              <div className="stack-options">
-                <div 
-                  className={`stack-btn ${activeStack === '2D' ? 'active' : ''}`}
-                  onClick={() => setActiveStack('2D')}
+    <Dialog
+      open={showSettings}
+      onClose={() => setShowSettings(false)}
+      icon={<Settings className="text-purple-400 h-5 w-5" />}
+      title="System Config"
+      footer={`BOLT XR LABS · v${APP_VERSION}`}
+    >
+      <div className="flex flex-col gap-8">
+        {/* STACK SELECTION */}
+        <section>
+          <div className="section-title"><Layers size={14} /> Interface</div>
+          <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Interface stack">
+            {STACKS.map(({ id, label, desc, icon: Icon }) => {
+              const active = activeStack === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setActiveStack(id)}
+                  className={`text-left p-4 rounded-2xl border transition-colors ${active
+                    ? 'bg-purple-500/10 border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.12)]'
+                    : 'bg-white/[0.02] border-white/10 hover:bg-white/[0.05] hover:border-white/20'}`}
                 >
-                  <div className="stack-label">2D WEB CAMERA</div>
-                  <div className="stack-desc">MediaPipe Handtracking</div>
-                </div>
-                <div 
-                  className={`stack-btn ${activeStack === 'XR' ? 'active' : ''}`}
-                  onClick={() => setActiveStack('XR')}
-                >
-                  <div className="stack-label">LEGACY BOLTXR</div>
-                  <div className="stack-desc">WebXR / Spatial 3D</div>
-                </div>
-              </div>
-            </div>
+                  <Icon size={18} className={active ? 'text-purple-400 mb-2' : 'text-slate-500 mb-2'} />
+                  <div className="text-xs font-extrabold tracking-wider uppercase">{label}</div>
+                  <div className="text-[10px] text-slate-500 mt-1">{desc}</div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3 leading-relaxed">
+            Spatial XR starts a WebXR session when you choose VR or AR — make sure your headset is connected and WebXR is enabled in your browser.
+          </p>
+        </section>
 
-            {/* PERFORMANCE */}
-            <div className="settings-section">
-              <div className="section-title">
-                <Cpu size={14} className="mr-2" /> 2D PERFORMANCE
+        {/* SECURITY */}
+        <section>
+          <div className="section-title"><ShieldCheck size={14} /> Security</div>
+          <div className="card p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold">Vault</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Auto-locks after 15 minutes without activity</div>
               </div>
-              <div className="flex items-center justify-between p-4 glass rounded-xl border border-white/5">
-                <div>
-                  <div className="text-sm font-bold">Model Complexity</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">
-                    Higher = Better precision, lower FPS
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    className={`toggle-tab ${modelComplexity === 0 ? 'active' : ''}`}
-                    onClick={() => setModelComplexity(0)}
-                  >
-                    LITE
-                  </button>
-                  <button 
-                    className={`toggle-tab ${modelComplexity === 1 ? 'active' : ''}`}
-                    onClick={() => setModelComplexity(1)}
-                  >
-                    FULL
-                  </button>
-                </div>
-              </div>
+              <span className={`pill ${wallet.status === 'unlocked' ? 'pill-success' : wallet.status === 'no-vault' ? '' : 'pill-warning'}`}>
+                {wallet.status === 'unlocked' ? 'Unlocked' : wallet.status === 'no-vault' ? 'Not set up' : 'Locked'}
+              </span>
             </div>
-            
-            {/* HAPTICS */}
-            <div className="settings-section">
-              <div className="section-title">
-                <Zap size={14} className="mr-2" /> HAPTIC STACK
+            {wallet.status === 'unlocked' && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn btn-sm" onClick={wallet.lock}>
+                  <Lock size={14} /> Lock now
+                </button>
+                <RecoveryPhraseReveal />
               </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 glass rounded-xl border border-white/5">
-                  <div>
-                    <div className="text-sm font-bold">Haptic Feedback</div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">
-                      bHaptics & Lovense integration
-                    </div>
-                  </div>
-                  <button 
-                    className={`toggle-tab ${hapticsEnabled ? 'active' : ''}`}
-                    onClick={() => setHapticsEnabled(!hapticsEnabled)}
-                  >
-                    {hapticsEnabled ? 'ENABLED' : 'DISABLED'}
-                  </button>
-                </div>
+            )}
+          </div>
+        </section>
 
-                <div className={`p-4 glass rounded-xl border border-white/5 transition-opacity ${!hapticsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Link size={12} className="text-purple-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest">Lovense Token</span>
-                    </div>
-                    <div className={`status-pill ${lovense.getIsConnected() ? 'connected' : 'disconnected'}`}>
-                      {lovense.getIsConnected() ? 'CONNECTED' : 'OFFLINE'}
-                    </div>
-                  </div>
-                  <input 
-                    type="password"
-                    value={lovenseToken}
-                    onChange={(e) => setLovenseToken(e.target.value)}
-                    onBlur={() => lovense.setToken(lovenseToken)}
-                    placeholder="Enter Developer Token..."
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono focus:border-purple-500/50 outline-none transition-colors"
-                  />
-                </div>
-              </div>
+        {/* PERFORMANCE */}
+        <section>
+          <div className="section-title"><Cpu size={14} /> Hand tracking</div>
+          <div className="card flex items-center justify-between gap-4 p-4">
+            <div>
+              <div className="text-sm font-bold">Model complexity</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Full is more precise; Lite is faster on slower machines</div>
             </div>
-
-            {/* INFO */}
-            <div className="mt-6 p-4 rounded-xl bg-purple-500/5 border border-purple-500/20 flex gap-3">
-              <Info className="text-purple-400 shrink-0" size={16} />
-              <div className="text-[11px] leading-relaxed text-gray-400">
-                Switching to **LEGACY BOLTXR** will attempt to initialize a WebXR session. Ensure your hardware is connected and WebXR is enabled in your browser flags.
-              </div>
+            <div className="segmented" role="group" aria-label="Model complexity">
+              <button type="button" aria-pressed={modelComplexity === 0} onClick={() => setModelComplexity(0)}>LITE</button>
+              <button type="button" aria-pressed={modelComplexity === 1} onClick={() => setModelComplexity(1)}>FULL</button>
             </div>
           </div>
+        </section>
 
-          <div className="settings-footer">
-            BOLT XR LABS · v2.0.4-STABLE
+        {/* HAPTICS */}
+        <section>
+          <div className="section-title"><Zap size={14} /> Haptics</div>
+          <div className="flex flex-col gap-3">
+            <div className="card flex items-center justify-between gap-4 p-4">
+              <div>
+                <div className="text-sm font-bold">Haptic feedback</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Pinch and tap confirmation via Lovense Connect</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={hapticsEnabled}
+                aria-label="Haptic feedback"
+                onClick={() => setHapticsEnabled(!hapticsEnabled)}
+                className={`relative h-6 w-11 rounded-full transition-colors ${hapticsEnabled ? 'bg-purple-500' : 'bg-white/15'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            <div className={`card p-4 transition-opacity ${hapticsEnabled ? '' : 'opacity-50'}`} aria-disabled={!hapticsEnabled}>
+              <div className="flex items-center justify-between mb-3">
+                <label htmlFor="lovense-token" className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                  <Link size={12} className="text-purple-400" /> Lovense token
+                </label>
+                <span className={`pill ${lovenseConnected ? 'pill-success' : 'pill-danger'}`}>
+                  {lovenseConnected ? 'Connected' : 'Offline'}
+                </span>
+              </div>
+              <input
+                id="lovense-token"
+                type="password"
+                value={lovenseToken}
+                disabled={!hapticsEnabled}
+                onChange={(e) => setLovenseToken(e.target.value)}
+                onBlur={() => lovense.setToken(lovenseToken)}
+                placeholder="Developer token"
+                autoComplete="off"
+                className="input"
+              />
+            </div>
           </div>
-        </motion.div>
-
-        <style jsx>{`
-          .settings-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(12px);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .settings-card {
-            width: 440px;
-            background: rgba(15, 15, 20, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 40px 100px rgba(0,0,0,0.8), 0 0 40px rgba(168, 85, 247, 0.1);
-            border-radius: 24px;
-            overflow: hidden;
-            color: white;
-          }
-          .settings-header {
-            padding: 24px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .close-icon {
-            color: rgba(255,255,255,0.4);
-            transition: color 0.2s;
-          }
-          .close-icon:hover { color: white; }
-          
-          .settings-body { padding: 24px; }
-          
-          .settings-section { margin-bottom: 32px; }
-          .section-title {
-            display: flex;
-            align-items: center;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.2em;
-            color: rgba(255,255,255,0.3);
-            margin-bottom: 16px;
-            text-transform: uppercase;
-          }
-
-          .stack-options {
-            display: grid;
-            grid-template-cols: 1fr 1fr;
-            gap: 12px;
-          }
-          .stack-btn {
-            padding: 16px;
-            border-radius: 16px;
-            border: 1px solid rgba(255,255,255,0.05);
-            background: rgba(255,255,255,0.02);
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-          .stack-btn:hover {
-            background: rgba(255,255,255,0.05);
-            border-color: rgba(255,255,255,0.1);
-          }
-          .stack-btn.active {
-            background: rgba(168, 85, 247, 0.1);
-            border-color: rgba(168, 85, 247, 0.4);
-            box-shadow: 0 0 20px rgba(168, 85, 247, 0.1);
-          }
-          .stack-label {
-            font-weight: 800;
-            font-size: 12px;
-            margin-bottom: 4px;
-          }
-          .stack-desc {
-            font-size: 9px;
-            color: rgba(255,255,255,0.4);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-          }
-
-          .toggle-tab {
-            padding: 8px 16px;
-            font-size: 10px;
-            font-weight: 800;
-            border-radius: 8px;
-            color: rgba(255,255,255,0.4);
-            transition: all 0.2s;
-          }
-          .toggle-tab.active {
-            background: white;
-            color: black;
-          }
-
-          .settings-footer {
-            padding: 16px 24px;
-            background: rgba(0,0,0,0.3);
-            font-size: 9px;
-            letter-spacing: 0.3em;
-            color: rgba(255,255,255,0.2);
-            text-align: center;
-          }
-
-          .status-pill {
-            font-size: 8px;
-            font-weight: 800;
-            padding: 2px 8px;
-            border-radius: 4px;
-            letter-spacing: 0.1em;
-          }
-          .status-pill.connected {
-            background: rgba(34, 197, 94, 0.1);
-            color: #22c55e;
-            border: 1px solid rgba(34, 197, 94, 0.2);
-          }
-          .status-pill.disconnected {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-          }
-        `}</style>
-      </motion.div>
-    </AnimatePresence>
+        </section>
+      </div>
+    </Dialog>
   );
 };
 

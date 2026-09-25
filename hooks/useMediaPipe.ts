@@ -1,129 +1,107 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import type { Results, Hands as HandsType } from '@mediapipe/hands';
-import * as mpHands from '@mediapipe/hands';
-import type { Camera as CameraType } from '@mediapipe/camera_utils';
-import * as cam from '@mediapipe/camera_utils';
+'use client';
 
-// MediaPipe packages often don't have proper ESM exports and set globals instead
-const Hands = (mpHands as any).Hands || (typeof window !== 'undefined' && (window as any).Hands);
-const Camera = (cam as any).Camera || (typeof window !== 'undefined' && (window as any).Camera);
-const HAND_CONNECTIONS = (mpHands as any).HAND_CONNECTIONS || (typeof window !== 'undefined' && (window as any).HAND_CONNECTIONS);
+import { useEffect, useRef, useState } from 'react';
+import type { Results, Hands as HandsType, Options } from '@mediapipe/hands';
+import type { Size } from '@/lib/gesture-engine';
 
 export type { Results };
 
-export interface HandLandmark {
-  x: number;
-  y: number;
-  z: number;
-}
+export type TrackingStatus = 'LOADING' | 'NO_HANDS' | 'TRACKING' | 'ERROR';
 
 export interface UseMediaPipeOptions {
   maxNumHands?: number;
   modelComplexity?: 0 | 1;
   minDetectionConfidence?: number;
   minTrackingConfidence?: number;
+  /** Called for every processed frame with the video's intrinsic size. */
+  onResults?: (results: Results, frame: Size) => void;
 }
 
+type HandsConstructor = new (config: { locateFile: (file: string) => string }) => HandsType;
+
+// Model assets are served from the package's CDN mirror.
+const locateFile = (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+
+/**
+ * Runs MediaPipe Hands against an existing <video> element (e.g. react-webcam),
+ * so only one camera stream is ever opened.
+ */
 export const useMediaPipe = (
   videoRef: React.RefObject<HTMLVideoElement | null>,
   options: UseMediaPipeOptions = {}
 ) => {
-  const [results, setResults] = useState<Results | null>(null);
-  const [status, setStatus] = useState<'INITIALIZING' | 'TRACKING' | 'NO_HANDS' | 'ERROR'>('INITIALIZING');
-  const handsRef = useRef<HandsType | null>(null);
-  const cameraRef = useRef<CameraType | null>(null);
-  const isProcessingRef = useRef(false);
-  const isStartedRef = useRef(false);
-
   const {
     maxNumHands = 2,
     modelComplexity = 1,
     minDetectionConfidence = 0.7,
     minTrackingConfidence = 0.5,
+    onResults,
   } = options;
 
-  const onResults = useCallback((results: Results) => {
-    setResults(results);
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      setStatus('TRACKING');
-    } else if (status !== 'ERROR') {
-      setStatus('NO_HANDS');
-    }
-  }, [status]);
+  const [status, setStatus] = useState<TrackingStatus>('LOADING');
+  const onResultsRef = useRef(onResults);
 
   useEffect(() => {
-    // Prevent double initialization in dev mode (React 18 StrictMode)
-    if (handsRef.current) return;
+    onResultsRef.current = onResults;
+  }, [onResults]);
 
-    const hands = new Hands({
-      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
+  useEffect(() => {
+    let disposed = false;
+    let rafId = 0;
+    let processing = false;
+    let hands: HandsType | null = null;
 
-    hands.setOptions({
-      maxNumHands,
-      modelComplexity,
-      minDetectionConfidence,
-      minTrackingConfidence,
-    });
+    const start = async () => {
+      const mod = await import('@mediapipe/hands');
+      // The package is a UMD bundle; depending on the bundler it exports or sets a global.
+      const Ctor = ((mod as unknown as { Hands?: HandsConstructor }).Hands
+        || (window as unknown as { Hands?: HandsConstructor }).Hands);
+      if (!Ctor) throw new Error('MediaPipe Hands failed to load');
+      if (disposed) return;
 
-    hands.onResults(onResults);
-    handsRef.current = hands;
+      hands = new Ctor({ locateFile });
+      hands.setOptions({ maxNumHands, modelComplexity, minDetectionConfidence, minTrackingConfidence } as Options);
+      hands.onResults(results => {
+        if (disposed) return;
+        const video = videoRef.current;
+        const frame = { width: video?.videoWidth || 640, height: video?.videoHeight || 480 };
+        setStatus(results.multiHandLandmarks?.length ? 'TRACKING' : 'NO_HANDS');
+        onResultsRef.current?.(results, frame);
+      });
+      await hands.initialize();
+      if (disposed) return;
+      setStatus('NO_HANDS');
 
-    const startCamera = async () => {
-      if (isStartedRef.current) return;
-      const video = videoRef.current;
-      if (!video) return;
-
-      try {
-        cameraRef.current = new Camera(video, {
-          onFrame: async () => {
-            if (handsRef.current && video && !isProcessingRef.current) {
-              isProcessingRef.current = true;
-              try {
-                await handsRef.current.send({ image: video });
-              } catch (err) {
-                console.error("MediaPipe Send Error:", err);
-              } finally {
-                isProcessingRef.current = false;
-              }
-            }
-          },
-          width: 640,
-          height: 480,
-        });
-        if (cameraRef.current) {
-          await cameraRef.current.start();
+      const loop = async () => {
+        if (disposed) return;
+        const video = videoRef.current;
+        if (hands && video && video.readyState >= 2 && video.videoWidth > 0 && !processing) {
+          processing = true;
+          try {
+            await hands.send({ image: video });
+          } catch (err) {
+            if (!disposed) console.error('MediaPipe send error:', err);
+          } finally {
+            processing = false;
+          }
         }
-        isStartedRef.current = true;
-        console.log("MediaPipe Camera Started");
-      } catch (err) {
-        console.error("MediaPipe Camera Start Failure:", err);
-        setStatus('ERROR');
-      }
+        if (!disposed) rafId = requestAnimationFrame(loop);
+      };
+      rafId = requestAnimationFrame(loop);
     };
 
-    // Robust video readiness check
-    const checkVideo = setInterval(() => {
-      if (videoRef.current && videoRef.current.readyState >= 2) {
-        startCamera();
-        clearInterval(checkVideo);
-      }
-    }, 250);
+    start().catch(err => {
+      console.error('MediaPipe initialization failed:', err);
+      if (!disposed) setStatus('ERROR');
+    });
 
     return () => {
-      clearInterval(checkVideo);
-      isStartedRef.current = false;
-      if (cameraRef.current) {
-        cameraRef.current.stop();
-        cameraRef.current = null;
-      }
-      if (handsRef.current) {
-        handsRef.current.close();
-        handsRef.current = null;
-      }
-      setStatus('INITIALIZING');
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      hands?.close().catch(() => undefined);
+      hands = null;
     };
-  }, [videoRef, maxNumHands, modelComplexity, minDetectionConfidence, minTrackingConfidence, onResults]);
+  }, [videoRef, maxNumHands, modelComplexity, minDetectionConfidence, minTrackingConfidence]);
 
-  return { results, status, HAND_CONNECTIONS };
+  return { status };
 };

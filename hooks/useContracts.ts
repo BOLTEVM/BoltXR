@@ -4,15 +4,15 @@
  * useContracts — React hook for contract CRUD, interaction, and QR operations.
  *
  * Wraps BoltwalletCore's contract methods with React state management.
- * Supports listing, importing (manual + QR + auto-fetch), deleting,
- * and calling read/write contract methods.
+ * Contracts live inside the encrypted vault, so the list is only available
+ * while the vault is unlocked.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { BoltwalletCore, ContractData } from '@/lib/boltows/ows-core';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ContractData } from '@/lib/boltows/ows-core';
+import { walletCore as core } from '@/lib/boltows/core-instance';
 import { parseABIMethods } from '@/lib/abi-fetcher';
-
-const core = new BoltwalletCore();
+import { errorMessage } from '@/lib/format';
 
 export interface ContractMethod {
   name: string;
@@ -22,10 +22,9 @@ export interface ContractMethod {
   outputs: { name: string; type: string }[];
 }
 
-export function useContracts(chainId: string) {
+export function useContracts(chainId: string, enabled: boolean = true) {
   const [contracts, setContracts] = useState<ContractData[]>([]);
   const [selectedContract, setSelectedContract] = useState<ContractData | null>(null);
-  const [methods, setMethods] = useState<ContractMethod[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -33,170 +32,109 @@ export function useContracts(chainId: string) {
   // Load contracts for the active chain
   const refreshContracts = useCallback(async () => {
     try {
-      const list = await core.listContracts(chainId);
-      setContracts(list);
-    } catch (e: any) {
+      setContracts(enabled ? await core.listContracts(chainId) : []);
+    } catch (e) {
       console.error('Failed to load contracts:', e);
     }
-  }, [chainId]);
+  }, [chainId, enabled]);
 
   useEffect(() => {
-    refreshContracts();
-  }, [refreshContracts]);
+    let cancelled = false;
+    (enabled ? core.listContracts(chainId) : Promise.resolve([] as ContractData[]))
+      .then(list => { if (!cancelled) setContracts(list); })
+      .catch(e => console.error('Failed to load contracts:', e));
+    return () => { cancelled = true; };
+  }, [chainId, enabled]);
 
-  // Parse methods when a contract is selected
-  useEffect(() => {
-    if (selectedContract?.abi) {
-      const parsed = parseABIMethods(selectedContract.abi);
-      setMethods(parsed);
-    } else {
-      setMethods([]);
+  const methods: ContractMethod[] = useMemo(
+    () => (selectedContract?.abi ? parseABIMethods(selectedContract.abi) : []),
+    [selectedContract]
+  );
+
+  const flash = useCallback((message: string) => {
+    setImportStatus(message);
+    setTimeout(() => setImportStatus(current => (current === message ? null : current)), 3000);
+  }, []);
+
+  const run = useCallback(async (status: string, task: () => Promise<void>) => {
+    setLoading(true);
+    setError(null);
+    setImportStatus(status);
+    try {
+      await task();
+    } catch (e) {
+      setError(errorMessage(e));
+      setImportStatus(null);
+    } finally {
+      setLoading(false);
     }
-  }, [selectedContract]);
+  }, []);
 
   // Import a contract manually
-  const importManual = useCallback(async (
-    name: string,
-    address: string,
-    abi: string,
-    decimals: number
-  ) => {
-    setLoading(true);
-    setError(null);
-    setImportStatus('IMPORTING...');
-    try {
+  const importManual = useCallback((name: string, address: string, abi: string, decimals: number) =>
+    run('IMPORTING…', async () => {
       await core.importContract(name, address, abi, decimals, chainId);
       await refreshContracts();
-      setImportStatus('IMPORTED SUCCESSFULLY');
-      setTimeout(() => setImportStatus(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
-      setImportStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [chainId, refreshContracts]);
+      flash('IMPORTED SUCCESSFULLY');
+    }), [chainId, refreshContracts, run, flash]);
 
   // Import via auto-fetch (by address only)
-  const importByAddress = useCallback(async (address: string) => {
-    setLoading(true);
-    setError(null);
-    setImportStatus('FETCHING ABI...');
-    try {
-      const result = await core.fetchContractABI(address, chainId);
-      if ('abi' in result) {
-        setImportStatus('ABI FOUND — IMPORTING...');
-        // Detect decimals for ERC-20 tokens
-        let decimals = 18;
+  const importByAddress = useCallback((address: string) =>
+    run('FETCHING ABI…', async () => {
+      const result = await core.fetchContractABI(address.trim(), chainId);
+      if (!('abi' in result)) throw new Error(result.message);
+      setImportStatus('ABI FOUND — IMPORTING…');
+      let decimals = 18;
+      if (parseABIMethods(result.abi).some(m => m.name === 'decimals' && m.inputs.length === 0)) {
         try {
-          const methods = parseABIMethods(result.abi);
-          const hasDecimals = methods.find(m => m.name === 'decimals');
-          if (hasDecimals) {
-            const decResult = await core.callContractRead(address, result.abi, 'decimals', [], chainId);
-            decimals = Number(decResult);
-          }
-        } catch {
-          // Default to 18 if decimals call fails
-        }
-
-        await core.importContract(result.name, address, result.abi, decimals, chainId);
-        await refreshContracts();
-        setImportStatus(`IMPORTED: ${result.name}`);
-        setTimeout(() => setImportStatus(null), 3000);
-      } else {
-        setError(result.message);
-        setImportStatus(null);
+          decimals = Number(await core.callContractRead(address.trim(), result.abi, 'decimals', [], chainId));
+        } catch { /* default 18 */ }
       }
-    } catch (e: any) {
-      setError(e.message);
-      setImportStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [chainId, refreshContracts]);
+      await core.importContract(result.name, address, result.abi, decimals, chainId);
+      await refreshContracts();
+      flash(`IMPORTED: ${result.name}`);
+    }), [chainId, refreshContracts, run, flash]);
 
   // Import from QR scan payload
-  const importFromQR = useCallback(async (rawPayload: string) => {
-    setLoading(true);
-    setError(null);
-    setImportStatus('PARSING QR...');
-    try {
+  const importFromQR = useCallback((rawPayload: string) =>
+    run('IMPORTING FROM QR…', async () => {
       const contract = await core.importContractFromQR(rawPayload);
-      if (contract) {
-        await refreshContracts();
-        setImportStatus(`IMPORTED: ${contract.name}`);
-        setTimeout(() => setImportStatus(null), 3000);
-      } else {
-        setError('Failed to import contract from QR code');
-        setImportStatus(null);
-      }
-    } catch (e: any) {
-      setError(e.message);
-      setImportStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [refreshContracts]);
+      if (!contract) throw new Error('Could not import this contract — its ABI was not embedded and is not verified on-chain.');
+      await refreshContracts();
+      flash(`IMPORTED: ${contract.name}`);
+    }), [refreshContracts, run, flash]);
 
   // Delete a contract
   const removeContract = useCallback(async (address: string) => {
     try {
       await core.deleteContract(address, chainId);
-      if (selectedContract?.address === address) {
-        setSelectedContract(null);
-      }
+      setSelectedContract(current => (current?.address === address ? null : current));
       await refreshContracts();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e));
     }
-  }, [chainId, selectedContract, refreshContracts]);
+  }, [chainId, refreshContracts]);
 
   // Export a contract as QR
   const exportQR = useCallback(async (address: string) => {
     try {
-      setImportStatus('GENERATING QR...');
-      const result = await core.exportContractQR(address, chainId);
-      setImportStatus(null);
-      return result;
-    } catch (e: any) {
-      setError(e.message);
-      setImportStatus(null);
+      return await core.exportContractQR(address, chainId);
+    } catch (e) {
+      setError(errorMessage(e));
       return null;
     }
   }, [chainId]);
 
   // Call a read method
-  const callRead = useCallback(async (
-    method: string,
-    args: any[]
-  ): Promise<any> => {
+  const callRead = useCallback(async (method: string, args: unknown[]): Promise<unknown> => {
     if (!selectedContract) throw new Error('No contract selected');
-    return core.callContractRead(
-      selectedContract.address,
-      selectedContract.abi,
-      method,
-      args,
-      chainId
-    );
+    return core.callContractRead(selectedContract.address, selectedContract.abi, method, args, chainId);
   }, [selectedContract, chainId]);
 
-  // Call a write method
-  const callWrite = useCallback(async (
-    walletId: string,
-    method: string,
-    args: any[],
-    value?: string
-  ): Promise<string> => {
+  // Call a write method (value in wei)
+  const callWrite = useCallback(async (walletId: string, method: string, args: unknown[], value?: string): Promise<string> => {
     if (!selectedContract) throw new Error('No contract selected');
-    return core.callContractWrite(
-      walletId,
-      selectedContract.address,
-      selectedContract.abi,
-      method,
-      args,
-      chainId,
-      value
-    );
+    return core.callContractWrite(walletId, selectedContract.address, selectedContract.abi, method, args, chainId, value);
   }, [selectedContract, chainId]);
 
   return {
@@ -206,6 +144,7 @@ export function useContracts(chainId: string) {
     methods,
     loading,
     error,
+    clearError: () => setError(null),
     importStatus,
     importManual,
     importByAddress,

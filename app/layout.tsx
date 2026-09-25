@@ -1,25 +1,42 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Space_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 import Polyfills from "@/components/Polyfills";
 import Providers from "@/components/Providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
+  weight: ["400", "700"],
   subsets: ["latin"],
+  display: "swap",
+});
+
+const bebasNeue = Bebas_Neue({
+  variable: "--font-bebas",
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Bolt | XR Handtracking Wallet",
-  description: "Next-gen Web3 Wallet for VR/AR/XR with Handtracking support.",
+  title: "BOLT XR | Spatial Wallet",
+  description: "Multi-chain Web3 wallet for VR/AR/XR with hand-tracking controls.",
   icons: {
     icon: "/0logov3.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#020617",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -28,16 +45,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=Inter:wght@400;700&display=swap" rel="stylesheet" />
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
+    <html lang="en" className={`${inter.variable} ${spaceMono.variable} ${bebasNeue.variable}`} suppressHydrationWarning>
+      <body className="antialiased" suppressHydrationWarning>
         <Polyfills />
         <Providers>
           {children}

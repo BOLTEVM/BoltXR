@@ -1,137 +1,270 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Copy, Check, QrCode, ScanLine, Smartphone } from 'lucide-react';
+import Image from 'next/image';
+import { Copy, Check, QrCode, ScanLine, Smartphone, CameraOff, Send, FileCode2, RotateCcw } from 'lucide-react';
+import Dialog from './ui/Dialog';
+import TokenIcon from './ui/TokenIcon';
 import { generateAddressQR, parseQRPayload, QRPayload } from '@/lib/qr-codec';
 import { useQRScanner } from '@/hooks/useQRScanner';
+import { useWallet } from '@/hooks/useWallet';
+import { CHAINS, resolveChainKey } from '@/lib/boltows/chains';
 
 interface QRPanelProps {
-  address: string | null;
-  chainId?: string;
   isOpen: boolean;
   onClose: () => void;
-  onAddressScanned?: (address: string, chainId?: string) => void;
+  initialTab?: TabType;
+  onAddressScanned?: (address: string, chainKey?: string) => void;
   onContractScanned?: (rawPayload: string) => void;
+  onRequestUnlock?: () => void;
 }
 
 type TabType = 'receive' | 'scan';
 
+const cameraErrorMessage = (e: unknown) => {
+  const name = (e as { name?: string })?.name;
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'Camera permission was denied. Allow camera access in your browser to scan.';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No camera was found on this device.';
+  if (name === 'NotReadableError') return 'The camera is in use by another application.';
+  return 'Could not start the camera.';
+};
+
 const QRPanel: React.FC<QRPanelProps> = ({
-  address, chainId = 'ethereum', isOpen, onClose,
-  onAddressScanned, onContractScanned,
+  isOpen, onClose, initialTab = 'receive', onAddressScanned, onContractScanned, onRequestUnlock,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('receive');
+  const { addresses, tokens, status } = useWallet();
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [chainKey, setChainKey] = useState('ethereum');
   const [qrDataUri, setQrDataUri] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [scanActive, setScanActive] = useState(false);
-  const [scanResult, setScanResult] = useState<QRPayload | null>(null);
+  const [scanResult, setScanResult] = useState<{ payload: QRPayload; raw: string } | null>(null);
+  // Each camera start is an "attempt"; readiness/errors are tied to the attempt they belong to.
+  const [attempt, setAttempt] = useState(0);
+  const [readyAttempt, setReadyAttempt] = useState<number | null>(null);
+  const [cameraFailure, setCameraFailure] = useState<{ attempt: number; message: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+
+  const wantCamera = isOpen && activeTab === 'scan' && !scanResult;
+  const scanActive = wantCamera && readyAttempt === attempt;
+  const cameraError = wantCamera && cameraFailure?.attempt === attempt ? cameraFailure.message : null;
   const { scannedData, reset: resetScanner } = useQRScanner(videoRef, scanActive);
 
-  useEffect(() => {
-    if (address) {
-      generateAddressQR(address, { eip681: true, chainId, size: 280 })
-        .then(setQrDataUri).catch(() => setQrDataUri(null));
+  const address = addresses[chainKey] || null;
+  const chain = CHAINS[chainKey];
+
+  // Reset per-open state
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
+      setActiveTab(initialTab);
+      setScanResult(null);
     }
-  }, [address, chainId]);
+  }
 
   useEffect(() => {
-    if (scannedData) {
-      const payload = parseQRPayload(scannedData.data);
-      if (payload) {
-        setScanResult(payload);
-        setScanActive(false);
-        if (payload.type === 'address' && onAddressScanned) onAddressScanned(payload.address, payload.chainId);
-        else if (payload.type === 'contract' && onContractScanned) onContractScanned(scannedData.data);
-      }
-    }
-  }, [scannedData, onAddressScanned, onContractScanned]);
+    if (!address) return;
+    let cancelled = false;
+    generateAddressQR(address, { eip681: true, chainId: chainKey, size: 280 })
+      .then(uri => { if (!cancelled) setQrDataUri(uri); })
+      .catch(() => { if (!cancelled) setQrDataUri(null); });
+    return () => { cancelled = true; };
+  }, [address, chainKey]);
 
-  const startCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-      setScanActive(true); setScanResult(null); resetScanner();
-    } catch { console.error('Camera access denied'); }
+  // Own the camera stream for as long as scanning is wanted.
+  useEffect(() => {
+    if (!wantCamera) return;
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    const video = videoRef.current;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      Promise.resolve().then(() => {
+        if (!cancelled) setCameraFailure({ attempt, message: 'Camera access is not available in this browser.' });
+      });
+      return () => { cancelled = true; };
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(async s => {
+        // The panel may have closed (or restarted) while the permission prompt was open.
+        if (cancelled) {
+          s.getTracks().forEach(t => t.stop());
+          return;
+        }
+        stream = s;
+        if (video) {
+          video.srcObject = s;
+          await video.play().catch(() => undefined);
+        }
+        if (!cancelled) setReadyAttempt(attempt);
+      })
+      .catch(e => {
+        if (!cancelled) setCameraFailure({ attempt, message: cameraErrorMessage(e) });
+      });
+
+    return () => {
+      cancelled = true;
+      stream?.getTracks().forEach(t => t.stop());
+      if (video) video.srcObject = null;
+    };
+  }, [wantCamera, attempt]);
+
+  const restartScan = useCallback(() => {
+    resetScanner();
+    setScanResult(null);
+    setAttempt(a => a + 1);
   }, [resetScanner]);
 
-  const stopCamera = useCallback(() => {
-    setScanActive(false);
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-  }, []);
+  // Handle a decoded frame
+  const [lastHandled, setLastHandled] = useState<number | null>(null);
+  if (scannedData && scannedData.timestamp !== lastHandled) {
+    setLastHandled(scannedData.timestamp);
+    const payload = parseQRPayload(scannedData.data);
+    if (payload) setScanResult({ payload, raw: scannedData.data });
+  }
 
-  useEffect(() => { if (!isOpen) { stopCamera(); setActiveTab('receive'); setScanResult(null); } }, [isOpen, stopCamera]);
-
-  const handleCopy = useCallback(() => {
-    if (address) { navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  const handleCopy = useCallback(async () => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
   }, [address]);
 
-  const truncAddr = address ? `${address.substring(0, 10)}...${address.substring(address.length - 8)}` : '';
-  if (!isOpen) return null;
+  const receiveChains = tokens.length ? tokens.map(t => t.chainKey) : Object.keys(addresses);
+  const scannedChainKey = scanResult?.payload.type === 'address' ? resolveChainKey(scanResult.payload.chainId) : null;
 
   return (
-    <AnimatePresence>
-      <motion.div className="qrp-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <motion.div className="qrp-card" initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}>
-          <div className="qrp-header">
-            <div className="flex items-center gap-3"><QrCode className="text-purple-400 h-5 w-5" /><span className="text-xl font-bold tracking-tight">QR TERMINAL</span></div>
-            <button onClick={onClose} className="qrp-close"><X size={20} /></button>
-          </div>
-          <div className="qrp-tabs">
-            <button className={`qrp-tab ${activeTab === 'receive' ? 'active' : ''}`} onClick={() => { setActiveTab('receive'); stopCamera(); }}><Smartphone size={12} /> RECEIVE</button>
-            <button className={`qrp-tab ${activeTab === 'scan' ? 'active' : ''}`} onClick={() => { setActiveTab('scan'); startCamera(); }}><ScanLine size={12} /> SCAN</button>
-          </div>
-          <div className="qrp-body">
-            {activeTab === 'receive' && (
-              <div className="qrp-recv">
-                {qrDataUri ? (<div className="qrp-qr-wrap"><img src={qrDataUri} alt="Wallet QR" className="qrp-qr-img" /></div>) : (<div className="qrp-placeholder"><QrCode size={48} className="text-gray-600" /><p>CONNECT WALLET TO GENERATE QR</p></div>)}
-                {address && (<div className="qrp-addr" onClick={handleCopy}><span className="qrp-addr-text">{truncAddr}</span>{copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} className="text-gray-400" />}</div>)}
-                <p className="qrp-hint">Scan this QR code from any wallet to send assets to this address.</p>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      size="sm"
+      icon={<QrCode className="text-purple-400 h-5 w-5" />}
+      title="QR Terminal"
+      footer="EIP-681 · BIP-21 · boltxr:// contracts"
+      toolbar={
+        <div className="tabs" role="tablist">
+          <button type="button" role="tab" className="tab" aria-selected={activeTab === 'receive'} onClick={() => setActiveTab('receive')}>
+            <Smartphone size={12} /> RECEIVE
+          </button>
+          <button type="button" role="tab" className="tab" aria-selected={activeTab === 'scan'} onClick={() => setActiveTab('scan')}>
+            <ScanLine size={12} /> SCAN
+          </button>
+        </div>
+      }
+    >
+      {activeTab === 'receive' && (
+        <div className="flex flex-col items-center gap-4">
+          {status !== 'unlocked' ? (
+            <div className="flex flex-col items-center gap-4 py-10 text-center">
+              <QrCode size={48} className="text-slate-600" />
+              <p className="text-sm text-slate-400 max-w-[240px]">Unlock your vault to show your receive address.</p>
+              {onRequestUnlock && <button type="button" className="btn btn-primary" onClick={onRequestUnlock}>Unlock vault</button>}
+            </div>
+          ) : (
+            <>
+              <label className="w-full">
+                <span className="field-label">Network</span>
+                <select className="input" value={chainKey} onChange={e => setChainKey(e.target.value)}>
+                  {receiveChains.map(key => (
+                    <option key={key} value={key}>{CHAINS[key]?.name} ({CHAINS[key]?.nativeCurrency.symbol})</option>
+                  ))}
+                </select>
+              </label>
+              <div className="rounded-2xl bg-white p-3 shadow-[0_0_30px_rgba(168,85,247,0.15)]">
+                {qrDataUri && address ? (
+                  <Image src={qrDataUri} alt={`QR code for your ${chain?.name} address`} width={220} height={220} unoptimized className="h-[220px] w-[220px] [image-rendering:pixelated]" />
+                ) : (
+                  <div className="h-[220px] w-[220px] flex items-center justify-center text-slate-400 text-xs">Generating…</div>
+                )}
+              </div>
+              {address && (
+                <button type="button" onClick={handleCopy} className="card w-full flex items-center justify-between gap-3 px-3 py-2.5 hover:border-white/20 transition-colors" aria-label="Copy address">
+                  <span className="mono text-[11px] text-slate-300 break-all text-left">{address}</span>
+                  {copied ? <Check size={16} className="text-emerald-400 shrink-0" /> : <Copy size={16} className="text-slate-400 shrink-0" />}
+                </button>
+              )}
+              {chain && (
+                <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                  Only send <strong className="text-slate-300">{chain.nativeCurrency.symbol}</strong>
+                  {chain.kind === 'evm' ? ' or tokens' : ''} on <strong className="text-slate-300">{chain.name}</strong> to this address.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'scan' && (
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-black border border-purple-500/30">
+            <video ref={videoRef} className="h-full w-full object-cover" playsInline muted />
+            {scanActive && (
+              <div className="absolute inset-5 border-2 border-purple-500/50 rounded-lg overflow-hidden pointer-events-none">
+                <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-purple-400 to-transparent animate-[scan_2s_ease-in-out_infinite]" />
               </div>
             )}
-            {activeTab === 'scan' && (
-              <div className="qrp-scan">
-                <div className="qrp-viewport"><video ref={videoRef} className="qrp-video" playsInline muted />{scanActive && (<div className="qrp-scan-ol"><motion.div className="qrp-scan-line" animate={{ y: [0, 200, 0] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }} /></div>)}</div>
-                {scanResult && (<motion.div className="qrp-result" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>{scanResult.type === 'address' ? (<><div className="qrp-badge addr">ADDRESS</div><span className="qrp-result-val">{scanResult.address.substring(0, 16)}...</span></>) : (<><div className="qrp-badge contract">CONTRACT</div><span className="qrp-result-val">{scanResult.name}</span></>)}</motion.div>)}
-                {!scanActive && !scanResult && (<button className="qrp-start-btn" onClick={startCamera}><ScanLine size={16} /> START SCANNER</button>)}
+            {cameraError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-black/80">
+                <CameraOff className="text-slate-500" />
+                <p className="text-xs text-slate-300">{cameraError}</p>
               </div>
             )}
           </div>
-          <div className="qrp-footer">BOLT XR · QR TERMINAL · EIP-681 COMPATIBLE</div>
-        </motion.div>
-        <style jsx>{`
-          .qrp-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);z-index:1000;display:flex;align-items:center;justify-content:center}
-          .qrp-card{width:380px;background:rgba(15,15,20,0.95);border:1px solid rgba(255,255,255,0.1);box-shadow:0 40px 100px rgba(0,0,0,0.8),0 0 40px rgba(168,85,247,0.1);border-radius:24px;overflow:hidden;color:white}
-          .qrp-header{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between}
-          .qrp-close{color:rgba(255,255,255,0.4);transition:color 0.2s}.qrp-close:hover{color:white}
-          .qrp-tabs{display:flex;padding:0 24px;gap:8px;border-bottom:1px solid rgba(255,255,255,0.05)}
-          .qrp-tab{flex:1;padding:12px;font-size:10px;font-weight:800;letter-spacing:0.15em;color:rgba(255,255,255,0.4);border-bottom:2px solid transparent;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px}
-          .qrp-tab:hover{color:rgba(255,255,255,0.7)}.qrp-tab.active{color:#a855f7;border-bottom-color:#a855f7}
-          .qrp-body{padding:24px;min-height:340px}
-          .qrp-recv{display:flex;flex-direction:column;align-items:center;gap:16px}
-          .qrp-qr-wrap{padding:16px;background:rgba(15,23,42,0.8);border:1px solid rgba(168,85,247,0.3);border-radius:16px;box-shadow:0 0 30px rgba(168,85,247,0.1)}
-          .qrp-qr-img{width:240px;height:240px;image-rendering:pixelated}
-          .qrp-placeholder{width:240px;height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border:2px dashed rgba(255,255,255,0.1);border-radius:16px;color:rgba(255,255,255,0.3);font-size:10px;letter-spacing:0.1em}
-          .qrp-addr{display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer;transition:background 0.2s}.qrp-addr:hover{background:rgba(255,255,255,0.1)}
-          .qrp-addr-text{font-family:'Space Mono',monospace;font-size:11px;color:rgba(255,255,255,0.7)}
-          .qrp-hint{font-size:10px;color:rgba(255,255,255,0.3);text-align:center;max-width:260px}
-          .qrp-scan{display:flex;flex-direction:column;align-items:center;gap:16px}
-          .qrp-viewport{width:280px;height:220px;border-radius:16px;overflow:hidden;position:relative;background:#000;border:1px solid rgba(168,85,247,0.3)}
-          .qrp-video{width:100%;height:100%;object-fit:cover}
-          .qrp-scan-ol{position:absolute;inset:20px;border:2px solid rgba(168,85,247,0.5);border-radius:8px;overflow:hidden}
-          .qrp-scan-line{width:100%;height:2px;background:linear-gradient(90deg,transparent,#a855f7,transparent);position:absolute;top:0}
-          .qrp-result{display:flex;align-items:center;gap:8px;padding:10px 16px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px}
-          .qrp-badge{font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:0.1em}
-          .qrp-badge.addr{background:rgba(96,165,250,0.2);color:#60a5fa}.qrp-badge.contract{background:rgba(168,85,247,0.2);color:#a855f7}
-          .qrp-result-val{font-family:'Space Mono',monospace;font-size:11px;color:white}
-          .qrp-start-btn{display:flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:12px;color:#a855f7;font-size:10px;font-weight:800;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s}.qrp-start-btn:hover{background:rgba(168,85,247,0.3);transform:scale(1.02)}
-          .qrp-footer{padding:12px 24px;background:rgba(0,0,0,0.3);font-size:8px;letter-spacing:0.3em;color:rgba(255,255,255,0.15);text-align:center}
-        `}</style>
-      </motion.div>
-    </AnimatePresence>
+
+          {scanActive && !scanResult && (
+            <p className="text-xs text-slate-400">Point the camera at a wallet or contract QR code.</p>
+          )}
+
+          {scanResult && (
+            <div className="w-full flex flex-col gap-3">
+              <div className="notice notice-success items-center">
+                {scanResult.payload.type === 'address' ? (
+                  <>
+                    <span className="pill pill-info">Address</span>
+                    <span className="mono text-[11px] break-all">{scanResult.payload.address}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="pill pill-brand">Contract</span>
+                    <span className="text-sm font-bold">{scanResult.payload.name}</span>
+                  </>
+                )}
+              </div>
+              {scannedChainKey && CHAINS[scannedChainKey] && (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <TokenIcon symbol={CHAINS[scannedChainKey].nativeCurrency.symbol} color={CHAINS[scannedChainKey].color} size={20} />
+                  {CHAINS[scannedChainKey].name}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" className="btn" onClick={restartScan}><RotateCcw size={14} /> Scan again</button>
+                {scanResult.payload.type === 'address' && onAddressScanned && (
+                  <button type="button" className="btn btn-primary" onClick={() => {
+                    if (scanResult.payload.type === 'address') onAddressScanned(scanResult.payload.address, scannedChainKey || undefined);
+                  }}>
+                    <Send size={14} /> Send here
+                  </button>
+                )}
+                {scanResult.payload.type === 'contract' && onContractScanned && (
+                  <button type="button" className="btn btn-primary" onClick={() => onContractScanned(scanResult.raw)}>
+                    <FileCode2 size={14} /> Import
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!scanActive && !scanResult && cameraError && (
+            <button type="button" className="btn btn-primary" onClick={restartScan}><ScanLine size={16} /> Try again</button>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 };
 
