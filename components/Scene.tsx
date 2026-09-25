@@ -15,7 +15,7 @@ import QRPanel3D from './QRPanel3D';
 import ContractClipboard3D from './ContractClipboard3D';
 
 export default function Scene() {
-    const { tokens, account, isLocked, isVaultSetup, unlock, setup, connect, send, swap, lockoutUntil } = useWallet();
+    const { tokens, account, isLocked, isVaultSetup, unlock, setup, swap, lockoutUntil } = useWallet();
     const [selectedToken, setSelectedToken] = useState<any>(null);
     const [inputTokenForSwap, setInputTokenForSwap] = useState<any>(null);
     const [targetTokenForSwap, setTargetTokenForSwap] = useState<any>(null);
@@ -37,21 +37,20 @@ export default function Scene() {
     const [showClipboard, setShowClipboard] = useState(false);
 
     const handleConnect = () => {
-        if (isLocked) {
-            setPinPadAction('unlock');
-            setShowPinPad(true);
-        } else if (!isVaultSetup) {
+        // First-run users must set up a vault before there is anything to unlock.
+        if (!isVaultSetup) {
             setPinPadAction('setup');
             setShowPinPad(true);
-        } else {
-            connect();
+        } else if (isLocked) {
+            setPinPadAction('unlock');
+            setShowPinPad(true);
         }
     };
 
     const handlePinConfirm = async (pin: string) => {
         setPinError("");
         if (pinPadAction === 'unlock') {
-            const success = await unlock(pin);
+            const { ok: success } = await unlock(pin);
             if (success) {
                 setShowPinPad(false);
                 setPinPadAction(null);
@@ -59,7 +58,7 @@ export default function Scene() {
                 setPinError("INVALID PIN");
             }
         } else if (pinPadAction === 'setup') {
-            const mnemonic = await setup(pin);
+            const mnemonic = await setup(pin).catch(() => null);
             if (mnemonic) {
                 setSecureContent(mnemonic);
                 setShowSecureInfo(true);
@@ -198,7 +197,7 @@ export default function Scene() {
                     <TransactionPanel
                         token={selectedToken}
                         onClose={() => setSelectedToken(null)}
-                        onSend={send}
+                        onSend={async () => false}
                         onSwap={swap}
                     />
                 </group>

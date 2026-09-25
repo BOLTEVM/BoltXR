@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
 import { Buffer } from 'buffer';
 import process from 'process';
 
-export default function Polyfills() {
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            window.Buffer = window.Buffer || Buffer;
-            window.process = window.process || process;
-        }
-    }, []);
+// Install Node globals at module evaluation so crypto libraries that probe
+// for them during their own first run (before any effect fires) find them.
+if (typeof window !== 'undefined') {
+  const w = window as unknown as { Buffer?: typeof Buffer; process?: typeof process };
+  w.Buffer = w.Buffer || Buffer;
+  w.process = w.process || process;
+}
 
-    return null;
+export default function Polyfills() {
+  return null;
 }

@@ -1,13 +1,10 @@
 'use client';
 
 /**
- * useQRScanner — Frame-by-frame QR code scanner using jsQR.
+ * useQRScanner — Frame-sampling QR code scanner using jsQR.
  *
- * Taps into an existing <video> element (from react-webcam or a camera feed)
- * and runs jsQR detection on each animation frame when enabled.
- *
- * Works in both 2D HandTracking mode (reusing the webcam stream)
- * and XR mode (using a separate camera feed).
+ * Taps into an existing <video> element and decodes a downscaled frame a few
+ * times per second while enabled.
  */
 
 import { useState, useEffect, useRef, useCallback, RefObject } from 'react';
@@ -18,106 +15,70 @@ export interface QRScanResult {
   timestamp: number;
 }
 
+const SCAN_INTERVAL_MS = 150;
+const MAX_SCAN_WIDTH = 640;
+
 export function useQRScanner(
   videoRef: RefObject<HTMLVideoElement | null>,
   enabled: boolean = false
 ) {
   const [scannedData, setScannedData] = useState<QRScanResult | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafIdRef = useRef<number | null>(null);
   const lastScanRef = useRef<string | null>(null);
 
-  // Create an offscreen canvas for frame extraction
   useEffect(() => {
-    if (enabled && !canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
-    }
-  }, [enabled]);
+    if (!enabled) return;
 
-  const scanFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (!video || !canvas || video.readyState < 2) {
-      rafIdRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-
-    if (width === 0 || height === 0) {
-      rafIdRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-
+    const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) {
-      rafIdRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
+    let rafId: number | null = null;
+    let lastRun = 0;
+    let stopped = false;
 
-    ctx.drawImage(video, 0, 0, width, height);
-    const imageData = ctx.getImageData(0, 0, width, height);
+    const tick = (time: number) => {
+      if (stopped) return;
+      rafId = requestAnimationFrame(tick);
+      if (time - lastRun < SCAN_INTERVAL_MS) return;
+      lastRun = time;
 
-    try {
-      const code = jsQR(imageData.data, width, height, {
-        inversionAttempts: 'dontInvert',
-      });
+      const video = videoRef.current;
+      if (!ctx || !video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
 
-      if (code && code.data && code.data !== lastScanRef.current) {
-        lastScanRef.current = code.data;
-        setScannedData({
-          data: code.data,
-          timestamp: Date.now(),
-        });
-      }
-    } catch {
-      // jsQR can throw on malformed frames — silently continue
-    }
+      const scale = Math.min(1, MAX_SCAN_WIDTH / video.videoWidth);
+      const width = Math.round(video.videoWidth * scale);
+      const height = Math.round(video.videoHeight * scale);
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
 
-    rafIdRef.current = requestAnimationFrame(scanFrame);
-  }, [videoRef]);
-
-  // Start/stop scanning loop
-  useEffect(() => {
-    if (enabled) {
-      setIsScanning(true);
-      setError(null);
-      lastScanRef.current = null;
-      rafIdRef.current = requestAnimationFrame(scanFrame);
-    } else {
-      setIsScanning(false);
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    }
-
-    return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
+      try {
+        ctx.drawImage(video, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        // attemptBoth also reads light-on-dark codes produced by older builds.
+        const code = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+        if (code?.data && code.data !== lastScanRef.current) {
+          lastScanRef.current = code.data;
+          setScannedData({ data: code.data, timestamp: Date.now() });
+        }
+      } catch {
+        // Malformed frames can throw — keep scanning.
       }
     };
-  }, [enabled, scanFrame]);
+
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [enabled, videoRef]);
 
   // Reset the scanner state (allow re-scanning)
   const reset = useCallback(() => {
     setScannedData(null);
     lastScanRef.current = null;
-    setError(null);
   }, []);
 
   return {
     scannedData,
-    isScanning,
-    error,
+    isScanning: enabled,
     reset,
   };
 }

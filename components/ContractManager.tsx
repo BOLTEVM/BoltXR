@@ -1,278 +1,296 @@
 'use client';
 
 /**
- * ContractManager — 2D drawer-style panel for managing imported smart contracts.
+ * ContractManager — 2D panel for managing imported smart contracts.
  * Lists contracts, supports manual import, auto-fetch by address, QR import,
  * and an interactive method inspector for read/write calls.
  */
 
-import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileCode2, Search, Plus, Trash2, Download, ChevronDown, ChevronUp, Play, Send } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
+import { ethers } from 'ethers';
+import { FileCode2, Search, Plus, Trash2, QrCode, ChevronDown, ChevronUp, Play, Send, ChevronLeft, ScanLine, Lock } from 'lucide-react';
+import Dialog from './ui/Dialog';
 import { useContracts, ContractMethod } from '@/hooks/useContracts';
+import { useWallet } from '@/hooks/useWallet';
+import { CHAINS } from '@/lib/boltows/chains';
+import { parseAbiArg, formatAbiResult } from '@/lib/abi-args';
+import { errorMessage, truncateAddress } from '@/lib/format';
+import type { ContractData } from '@/lib/boltows/ows-core';
 
 interface ContractManagerProps {
-  chainId: string;
-  walletId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onOpenQRScanner?: () => void;
+  /** A scanned boltxr:// payload to import as soon as the manager opens. */
+  pendingPayload?: string | null;
+  onPendingHandled?: () => void;
+  onRequestUnlock?: () => void;
 }
 
+const EVM_CHAINS = Object.keys(CHAINS).filter(key => CHAINS[key].kind === 'evm');
+
+const methodKey = (m: ContractMethod, i: number) => `${m.name}#${i}`;
+
 const ContractManager: React.FC<ContractManagerProps> = ({
-  chainId, walletId, isOpen, onClose, onOpenQRScanner,
+  isOpen, onClose, onOpenQRScanner, pendingPayload, onPendingHandled, onRequestUnlock,
 }) => {
+  const wallet = useWallet();
+  const unlocked = wallet.status === 'unlocked';
+  const [chainId, setChainId] = useState('ethereum');
   const {
     contracts, selectedContract, setSelectedContract, methods,
-    loading, error, importStatus,
-    importManual, importByAddress, removeContract, exportQR, callRead, callWrite,
-  } = useContracts(chainId);
+    loading, error, clearError, importStatus,
+    importManual, importByAddress, importFromQR, removeContract, exportQR, callRead, callWrite,
+  } = useContracts(chainId, unlocked);
 
   const [view, setView] = useState<'list' | 'import' | 'inspect'>('list');
+  const [fetchAddr, setFetchAddr] = useState('');
   const [importAddr, setImportAddr] = useState('');
   const [importName, setImportName] = useState('');
   const [importAbi, setImportAbi] = useState('');
   const [importDec, setImportDec] = useState('18');
   const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
   const [methodArgs, setMethodArgs] = useState<Record<string, string[]>>({});
-  const [methodResults, setMethodResults] = useState<Record<string, string>>({});
-  const [qrExportUri, setQrExportUri] = useState<string | null>(null);
+  const [methodValue, setMethodValue] = useState<Record<string, string>>({});
+  const [methodResults, setMethodResults] = useState<Record<string, { text: string; error?: boolean }>>({});
+  const [pendingWrite, setPendingWrite] = useState<string | null>(null);
+  const [busyMethod, setBusyMethod] = useState<string | null>(null);
+  const [qrExport, setQrExport] = useState<{ uri: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // Import a scanned contract once the vault is available.
+  useEffect(() => {
+    if (!isOpen || !pendingPayload || !unlocked) return;
+    importFromQR(pendingPayload).finally(() => onPendingHandled?.());
+  }, [isOpen, pendingPayload, unlocked, importFromQR, onPendingHandled]);
 
   const handleAutoFetch = useCallback(async () => {
-    if (!importAddr) return;
-    await importByAddress(importAddr);
-    setImportAddr('');
+    if (!ethers.isAddress(fetchAddr.trim())) return;
+    await importByAddress(fetchAddr);
+    setFetchAddr('');
     setView('list');
-  }, [importAddr, importByAddress]);
+  }, [fetchAddr, importByAddress]);
 
   const handleManualImport = useCallback(async () => {
     if (!importAddr || !importName || !importAbi) return;
-    await importManual(importName, importAddr, importAbi, parseInt(importDec));
+    await importManual(importName, importAddr, importAbi, parseInt(importDec, 10));
     setImportAddr(''); setImportName(''); setImportAbi(''); setImportDec('18');
     setView('list');
   }, [importAddr, importName, importAbi, importDec, importManual]);
 
-  const handleSelectContract = useCallback((c: any) => {
+  const handleSelectContract = useCallback((c: ContractData) => {
     setSelectedContract(c);
     setView('inspect');
     setExpandedMethod(null);
     setMethodResults({});
+    setPendingWrite(null);
   }, [setSelectedContract]);
 
-  const handleExportQR = useCallback(async (addr: string) => {
-    const result = await exportQR(addr);
-    if (result) setQrExportUri(result.dataUri);
+  const handleExportQR = useCallback(async (c: ContractData) => {
+    const result = await exportQR(c.address);
+    if (result) setQrExport({ uri: result.dataUri, name: c.name });
   }, [exportQR]);
 
-  const handleCallRead = useCallback(async (method: ContractMethod) => {
+  const handleCall = useCallback(async (method: ContractMethod, key: string) => {
+    setBusyMethod(key);
     try {
-      const args = (methodArgs[method.name] || []).map((a, i) => {
-        if (method.inputs[i]?.type.includes('uint') || method.inputs[i]?.type.includes('int')) return BigInt(a);
-        if (method.inputs[i]?.type === 'bool') return a === 'true';
-        return a;
-      });
-      const result = await callRead(method.name, args);
-      setMethodResults(prev => ({ ...prev, [method.name]: String(result) }));
-    } catch (e: any) {
-      setMethodResults(prev => ({ ...prev, [method.name]: `ERROR: ${e.message}` }));
+      const args = method.inputs.map((input, i) =>
+        parseAbiArg(input.type, methodArgs[key]?.[i] ?? '', input.name || `arg${i}`));
+      if (method.type === 'read') {
+        const result = await callRead(method.name, args);
+        setMethodResults(prev => ({ ...prev, [key]: { text: formatAbiResult(result) } }));
+      } else {
+        if (!wallet.walletId) throw new Error('Unlock your vault to sign transactions');
+        const valueText = methodValue[key]?.trim();
+        const value = valueText ? ethers.parseEther(valueText).toString() : undefined;
+        const txHash = await callWrite(wallet.walletId, method.name, args, value);
+        setMethodResults(prev => ({ ...prev, [key]: { text: `Submitted: ${txHash}` } }));
+        setPendingWrite(null);
+      }
+    } catch (e) {
+      setMethodResults(prev => ({ ...prev, [key]: { text: errorMessage(e), error: true } }));
+    } finally {
+      setBusyMethod(null);
     }
-  }, [methodArgs, callRead]);
+  }, [methodArgs, methodValue, callRead, callWrite, wallet.walletId]);
 
-  const handleCallWrite = useCallback(async (method: ContractMethod) => {
-    if (!walletId) return;
-    try {
-      const args = (methodArgs[method.name] || []).map((a, i) => {
-        if (method.inputs[i]?.type.includes('uint') || method.inputs[i]?.type.includes('int')) return BigInt(a);
-        if (method.inputs[i]?.type === 'bool') return a === 'true';
-        return a;
-      });
-      const txHash = await callWrite(walletId, method.name, args);
-      setMethodResults(prev => ({ ...prev, [method.name]: `TX: ${txHash}` }));
-    } catch (e: any) {
-      setMethodResults(prev => ({ ...prev, [method.name]: `ERROR: ${e.message}` }));
-    }
-  }, [methodArgs, walletId, callWrite]);
-
-  const updateArg = (methodName: string, idx: number, val: string) => {
+  const updateArg = (key: string, idx: number, val: string) => {
     setMethodArgs(prev => {
-      const current = prev[methodName] || [];
-      const updated = [...current];
+      const updated = [...(prev[key] || [])];
       updated[idx] = val;
-      return { ...prev, [methodName]: updated };
+      return { ...prev, [key]: updated };
     });
   };
 
-  const truncAddr = (a: string) => `${a.substring(0, 8)}...${a.substring(a.length - 6)}`;
-
-  if (!isOpen) return null;
+  const title = view === 'inspect' && selectedContract ? selectedContract.name : 'Contracts';
 
   return (
-    <AnimatePresence>
-      <motion.div className="cm-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <motion.div className="cm-card" initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}>
-          <div className="cm-header">
-            <div className="flex items-center gap-3">
-              <FileCode2 className="text-emerald-400 h-5 w-5" />
-              <span className="text-xl font-bold tracking-tight">CONTRACTS</span>
-            </div>
-            <button onClick={onClose} className="cm-close"><X size={20} /></button>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      size="lg"
+      icon={<FileCode2 className="text-emerald-400 h-5 w-5" />}
+      title={title}
+      footer={`${CHAINS[chainId]?.name} · Sourcify · Etherscan`}
+      toolbar={(importStatus || error) ? (
+        <div className={`px-5 py-2 text-[10px] font-extrabold tracking-[0.15em] border-b ${error
+          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`} role={error ? 'alert' : 'status'}>
+          {error ? (
+            <span className="flex items-center justify-between gap-3">
+              <span className="normal-case tracking-normal font-semibold text-xs">{error}</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={clearError}>Dismiss</button>
+            </span>
+          ) : importStatus}
+        </div>
+      ) : undefined}
+    >
+      {!unlocked ? (
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <Lock className="text-slate-500" />
+          <p className="text-sm text-slate-400 max-w-xs">Contracts are stored in your encrypted vault. Unlock it to manage and call them.</p>
+          {onRequestUnlock && <button type="button" className="btn btn-primary" onClick={onRequestUnlock}>Unlock vault</button>}
+        </div>
+      ) : view === 'list' ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="input !w-auto !min-h-[32px] !py-1 text-[11px]" value={chainId} onChange={e => setChainId(e.target.value)} aria-label="Network">
+              {EVM_CHAINS.map(key => <option key={key} value={key}>{CHAINS[key].name}</option>)}
+            </select>
+            <div className="flex-1" />
+            <button type="button" className="btn btn-sm" onClick={() => setView('import')}><Plus size={12} /> Import</button>
+            {onOpenQRScanner && <button type="button" className="btn btn-sm" onClick={onOpenQRScanner}><ScanLine size={12} /> Scan QR</button>}
           </div>
 
-          {/* Status bar */}
-          {(importStatus || error) && (
-            <div className={`cm-status ${error ? 'error' : ''}`}>
-              {error || importStatus}
+          {contracts.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-10 leading-relaxed">
+              No contracts on {CHAINS[chainId]?.name} yet.<br />Import one by address, ABI, or QR code.
             </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {contracts.map(c => (
+                <li key={c.address} className="card flex items-center gap-3 px-4 py-3 hover:border-emerald-500/30 transition-colors">
+                  <button type="button" className="flex-1 text-left min-w-0" onClick={() => handleSelectContract(c)}>
+                    <div className="text-sm font-bold truncate">{c.name}</div>
+                    <div className="mono text-[10px] text-slate-500 mt-0.5">{truncateAddress(c.address, 8, 6)}</div>
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => handleExportQR(c)} aria-label={`Share ${c.name} as QR`}><QrCode size={14} /></button>
+                  {confirmDelete === c.address ? (
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => { removeContract(c.address); setConfirmDelete(null); }}>Confirm</button>
+                  ) : (
+                    <button type="button" className="icon-btn hover:!text-red-400" onClick={() => setConfirmDelete(c.address)} aria-label={`Remove ${c.name}`}><Trash2 size={14} /></button>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
 
-          <div className="cm-body">
-            {/* LIST VIEW */}
-            {view === 'list' && (
-              <>
-                <div className="cm-actions">
-                  <button className="cm-action-btn" onClick={() => setView('import')}><Plus size={12} /> IMPORT</button>
-                  {onOpenQRScanner && <button className="cm-action-btn" onClick={onOpenQRScanner}><Search size={12} /> SCAN QR</button>}
-                </div>
-                {contracts.length === 0 ? (
-                  <div className="cm-empty">No contracts imported for this chain.<br />Use IMPORT or SCAN QR to add one.</div>
-                ) : (
-                  <div className="cm-list">
-                    {contracts.map((c: any, i: number) => (
-                      <div key={i} className="cm-item" onClick={() => handleSelectContract(c)}>
-                        <div className="cm-item-info">
-                          <div className="cm-item-name">{c.name}</div>
-                          <div className="cm-item-addr">{truncAddr(c.address)}</div>
-                        </div>
-                        <div className="cm-item-actions">
-                          <button onClick={(e) => { e.stopPropagation(); handleExportQR(c.address); }} title="Export QR"><Download size={12} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); removeContract(c.address); }} title="Delete" className="cm-delete"><Trash2 size={12} /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {qrExportUri && (
-                  <div className="cm-qr-export">
-                    <img src={qrExportUri} alt="Contract QR" style={{ width: 180, height: 180, imageRendering: 'pixelated' as any }} />
-                    <button className="cm-qr-dismiss" onClick={() => setQrExportUri(null)}>DISMISS</button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* IMPORT VIEW */}
-            {view === 'import' && (
-              <div className="cm-import">
-                <div className="cm-section-title">AUTO-FETCH BY ADDRESS</div>
-                <div className="cm-input-row">
-                  <input className="cm-input" placeholder="0x contract address..." value={importAddr} onChange={e => setImportAddr(e.target.value)} />
-                  <button className="cm-fetch-btn" onClick={handleAutoFetch} disabled={loading || !importAddr}>
-                    {loading ? '...' : <><Search size={12} /> FETCH</>}
-                  </button>
-                </div>
-                <div className="cm-divider"><span>OR MANUAL ENTRY</span></div>
-                <input className="cm-input" placeholder="Contract Name" value={importName} onChange={e => setImportName(e.target.value)} />
-                <input className="cm-input" placeholder="Contract Address (0x...)" value={importAddr} onChange={e => setImportAddr(e.target.value)} />
-                <textarea className="cm-textarea" placeholder="ABI JSON Array..." value={importAbi} onChange={e => setImportAbi(e.target.value)} rows={4} />
-                <input className="cm-input" placeholder="Decimals (default: 18)" value={importDec} onChange={e => setImportDec(e.target.value)} />
-                <div className="cm-import-actions">
-                  <button className="cm-action-btn" onClick={() => setView('list')}>CANCEL</button>
-                  <button className="cm-action-btn primary" onClick={handleManualImport} disabled={loading}>IMPORT</button>
-                </div>
+          {qrExport && (
+            <div className="card flex flex-col items-center gap-3 p-4">
+              <div className="text-xs font-bold">{qrExport.name}</div>
+              <div className="rounded-xl bg-white p-2">
+                <Image src={qrExport.uri} alt={`QR code for ${qrExport.name}`} width={200} height={200} unoptimized className="[image-rendering:pixelated]" />
               </div>
-            )}
-
-            {/* INSPECT VIEW */}
-            {view === 'inspect' && selectedContract && (
-              <div className="cm-inspect">
-                <button className="cm-back-btn" onClick={() => { setView('list'); setSelectedContract(null); }}>← BACK</button>
-                <div className="cm-inspect-header">
-                  <div className="cm-inspect-name">{selectedContract.name}</div>
-                  <div className="cm-inspect-addr">{truncAddr(selectedContract.address)}</div>
-                </div>
-                <div className="cm-methods">
-                  {methods.length === 0 && <div className="cm-empty">No callable methods found in ABI.</div>}
-                  {methods.map((m, i) => (
-                    <div key={i} className="cm-method">
-                      <div className="cm-method-header" onClick={() => setExpandedMethod(expandedMethod === m.name ? null : m.name)}>
-                        <div className="cm-method-info">
-                          <span className={`cm-method-badge ${m.type}`}>{m.type === 'read' ? 'VIEW' : 'WRITE'}</span>
-                          <span className="cm-method-name">{m.name}</span>
+              <p className="text-[11px] text-slate-500 text-center">Scan with another Bolt XR wallet to import this contract.</p>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQrExport(null)}>Dismiss</button>
+            </div>
+          )}
+        </div>
+      ) : view === 'import' ? (
+        <div className="flex flex-col gap-4">
+          <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => setView('list')}><ChevronLeft size={14} /> Back</button>
+          <div>
+            <label htmlFor="cm-fetch" className="field-label">Auto-fetch verified ABI</label>
+            <div className="flex gap-2">
+              <input id="cm-fetch" className="input" placeholder="0x contract address" value={fetchAddr} onChange={e => setFetchAddr(e.target.value)} spellCheck={false} data-autofocus />
+              <button type="button" className="btn" onClick={handleAutoFetch} disabled={loading || !ethers.isAddress(fetchAddr.trim())}>
+                <Search size={14} /> {loading ? 'Fetching…' : 'Fetch'}
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-[10px] tracking-[0.2em] text-slate-600">
+            <span className="h-px flex-1 bg-white/10" /> OR ENTER MANUALLY <span className="h-px flex-1 bg-white/10" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-3">
+            <label><span className="field-label">Name</span><input className="input" value={importName} onChange={e => setImportName(e.target.value)} /></label>
+            <label><span className="field-label">Decimals</span><input className="input" inputMode="numeric" value={importDec} onChange={e => setImportDec(e.target.value.replace(/\D/g, ''))} /></label>
+          </div>
+          <label><span className="field-label">Address</span><input className="input" placeholder="0x…" value={importAddr} onChange={e => setImportAddr(e.target.value)} spellCheck={false} aria-invalid={importAddr !== '' && !ethers.isAddress(importAddr.trim())} /></label>
+          <label><span className="field-label">ABI (JSON array)</span><textarea className="input" rows={5} placeholder='[{"type":"function", …}]' value={importAbi} onChange={e => setImportAbi(e.target.value)} spellCheck={false} /></label>
+          <button type="button" className="btn btn-primary self-end" onClick={handleManualImport} disabled={loading || !importName || !ethers.isAddress(importAddr.trim()) || !importAbi}>
+            Import contract
+          </button>
+        </div>
+      ) : selectedContract ? (
+        <div className="flex flex-col gap-3">
+          <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => { setView('list'); setSelectedContract(null); }}><ChevronLeft size={14} /> Back</button>
+          <div className="card px-4 py-3 mono text-[11px] text-slate-400 break-all">{selectedContract.address}</div>
+          {methods.length === 0 && <div className="text-center text-slate-500 text-sm py-8">No callable functions in this ABI.</div>}
+          <ul className="flex flex-col gap-2">
+            {methods.map((m, i) => {
+              const key = methodKey(m, i);
+              const expanded = expandedMethod === key;
+              const result = methodResults[key];
+              const payable = m.stateMutability === 'payable';
+              return (
+                <li key={key} className="card overflow-hidden">
+                  <button type="button" className="w-full flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-white/[0.03] transition-colors" onClick={() => setExpandedMethod(expanded ? null : key)} aria-expanded={expanded}>
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className={`pill ${m.type === 'read' ? 'pill-info' : 'pill-warning'}`}>{m.type === 'read' ? 'View' : payable ? 'Payable' : 'Write'}</span>
+                      <span className="mono text-xs font-bold truncate">{m.name}({m.inputs.map(inp => inp.type).join(', ')})</span>
+                    </span>
+                    {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-white/5 p-3 flex flex-col gap-2">
+                      {m.inputs.map((inp, j) => (
+                        <input
+                          key={j}
+                          className="input !min-h-[36px] !text-[11px]"
+                          placeholder={`${inp.name || `arg${j}`} (${inp.type})`}
+                          value={methodArgs[key]?.[j] || ''}
+                          onChange={e => updateArg(key, j, e.target.value)}
+                          spellCheck={false}
+                        />
+                      ))}
+                      {payable && (
+                        <input className="input !min-h-[36px] !text-[11px]" inputMode="decimal" placeholder={`Value (${CHAINS[chainId]?.nativeCurrency.symbol})`} value={methodValue[key] || ''} onChange={e => setMethodValue(prev => ({ ...prev, [key]: e.target.value }))} />
+                      )}
+                      {m.type === 'write' && pendingWrite === key ? (
+                        <div className="notice notice-warning flex-col">
+                          <span>This signs and broadcasts a transaction from {truncateAddress(wallet.account)} on {CHAINS[chainId]?.name}.</span>
+                          <span className="flex gap-2">
+                            <button type="button" className="btn btn-sm" onClick={() => setPendingWrite(null)}>Cancel</button>
+                            <button type="button" className="btn btn-sm btn-primary" onClick={() => handleCall(m, key)} disabled={busyMethod === key}>
+                              {busyMethod === key ? 'Signing…' : 'Confirm & sign'}
+                            </button>
+                          </span>
                         </div>
-                        {expandedMethod === m.name ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </div>
-                      {expandedMethod === m.name && (
-                        <div className="cm-method-body">
-                          {m.inputs.map((inp, j) => (
-                            <input key={j} className="cm-input small" placeholder={`${inp.name || `arg${j}`} (${inp.type})`} value={methodArgs[m.name]?.[j] || ''} onChange={e => updateArg(m.name, j, e.target.value)} />
-                          ))}
-                          <button className={`cm-call-btn ${m.type}`} onClick={() => m.type === 'read' ? handleCallRead(m) : handleCallWrite(m)}>
-                            {m.type === 'read' ? <><Play size={12} /> CALL</> : <><Send size={12} /> SIGN & SEND</>}
-                          </button>
-                          {methodResults[m.name] && (
-                            <div className={`cm-method-result ${methodResults[m.name].startsWith('ERROR') ? 'error' : ''}`}>
-                              {methodResults[m.name]}
-                            </div>
-                          )}
+                      ) : (
+                        <button
+                          type="button"
+                          className={`btn btn-sm self-start ${m.type === 'write' ? 'btn-primary' : ''}`}
+                          disabled={busyMethod === key}
+                          onClick={() => (m.type === 'read' ? handleCall(m, key) : setPendingWrite(key))}
+                        >
+                          {m.type === 'read' ? <><Play size={12} /> {busyMethod === key ? 'Calling…' : 'Call'}</> : <><Send size={12} /> Sign &amp; send</>}
+                        </button>
+                      )}
+                      {result && (
+                        <div className={`mono text-[11px] px-3 py-2 rounded-lg bg-black/30 break-all ${result.error ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {result.text}
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="cm-footer">BOLT XR · CONTRACT TERMINAL · v1.0</div>
-        </motion.div>
-
-        <style jsx>{`
-          .cm-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(12px);z-index:1000;display:flex;align-items:center;justify-content:center}
-          .cm-card{width:440px;max-height:80vh;background:rgba(15,15,20,0.95);border:1px solid rgba(255,255,255,0.1);box-shadow:0 40px 100px rgba(0,0,0,0.8),0 0 40px rgba(16,185,129,0.1);border-radius:24px;overflow:hidden;color:white;display:flex;flex-direction:column}
-          .cm-header{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between}
-          .cm-close{color:rgba(255,255,255,0.4);transition:color 0.2s}.cm-close:hover{color:white}
-          .cm-status{padding:8px 24px;font-size:9px;font-weight:800;letter-spacing:0.15em;background:rgba(16,185,129,0.1);color:#10b981;border-bottom:1px solid rgba(16,185,129,0.2)}
-          .cm-status.error{background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.2)}
-          .cm-body{padding:20px 24px;overflow-y:auto;flex:1}
-          .cm-actions{display:flex;gap:8px;margin-bottom:16px}
-          .cm-action-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.6);font-size:9px;font-weight:800;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s}
-          .cm-action-btn:hover{background:rgba(255,255,255,0.1);color:white}.cm-action-btn.primary{background:rgba(16,185,129,0.2);border-color:rgba(16,185,129,0.4);color:#10b981}
-          .cm-empty{text-align:center;color:rgba(255,255,255,0.3);font-size:11px;padding:40px 0;line-height:1.8}
-          .cm-list{display:flex;flex-direction:column;gap:8px}
-          .cm-item{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;cursor:pointer;transition:all 0.2s}.cm-item:hover{background:rgba(255,255,255,0.06);border-color:rgba(16,185,129,0.3)}
-          .cm-item-info{flex:1}.cm-item-name{font-size:12px;font-weight:700}.cm-item-addr{font-size:9px;color:rgba(255,255,255,0.4);font-family:'Space Mono',monospace;margin-top:2px}
-          .cm-item-actions{display:flex;gap:8px}.cm-item-actions button{color:rgba(255,255,255,0.3);transition:color 0.2s}.cm-item-actions button:hover{color:white}.cm-delete:hover{color:#ef4444!important}
-          .cm-qr-export{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:16px;padding:16px;background:rgba(255,255,255,0.03);border-radius:12px}
-          .cm-qr-dismiss{font-size:9px;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.1em;cursor:pointer}
-          .cm-import{display:flex;flex-direction:column;gap:12px}
-          .cm-section-title{font-size:9px;font-weight:800;letter-spacing:0.2em;color:rgba(255,255,255,0.3);text-transform:uppercase}
-          .cm-input-row{display:flex;gap:8px}
-          .cm-input{flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:white;font-size:11px;font-family:'Space Mono',monospace;outline:none;transition:border-color 0.2s}.cm-input:focus{border-color:rgba(16,185,129,0.5)}.cm-input.small{padding:6px 10px;font-size:10px}
-          .cm-textarea{background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:white;font-size:10px;font-family:'Space Mono',monospace;outline:none;resize:vertical;transition:border-color 0.2s}.cm-textarea:focus{border-color:rgba(16,185,129,0.5)}
-          .cm-fetch-btn{display:flex;align-items:center;gap:4px;padding:10px 16px;background:rgba(96,165,250,0.2);border:1px solid rgba(96,165,250,0.4);border-radius:8px;color:#60a5fa;font-size:9px;font-weight:800;cursor:pointer;transition:all 0.2s;white-space:nowrap}.cm-fetch-btn:hover{background:rgba(96,165,250,0.3)}.cm-fetch-btn:disabled{opacity:0.5;cursor:not-allowed}
-          .cm-divider{text-align:center;padding:8px 0;font-size:8px;color:rgba(255,255,255,0.2);letter-spacing:0.2em;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px}
-          .cm-import-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
-          .cm-inspect{display:flex;flex-direction:column;gap:12px}
-          .cm-back-btn{font-size:9px;font-weight:800;color:rgba(255,255,255,0.4);letter-spacing:0.1em;cursor:pointer;align-self:flex-start;transition:color 0.2s}.cm-back-btn:hover{color:white}
-          .cm-inspect-header{padding:12px;background:rgba(255,255,255,0.03);border-radius:12px;border:1px solid rgba(255,255,255,0.06)}
-          .cm-inspect-name{font-size:14px;font-weight:800}.cm-inspect-addr{font-size:9px;color:rgba(255,255,255,0.4);font-family:'Space Mono',monospace;margin-top:4px}
-          .cm-methods{display:flex;flex-direction:column;gap:6px}
-          .cm-method{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden}
-          .cm-method-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:pointer;transition:background 0.2s;color:rgba(255,255,255,0.5)}.cm-method-header:hover{background:rgba(255,255,255,0.04)}
-          .cm-method-info{display:flex;align-items:center;gap:8px}
-          .cm-method-badge{font-size:7px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:0.1em}
-          .cm-method-badge.read{background:rgba(96,165,250,0.15);color:#60a5fa}.cm-method-badge.write{background:rgba(251,146,60,0.15);color:#fb923c}
-          .cm-method-name{font-size:11px;font-weight:700;color:white;font-family:'Space Mono',monospace}
-          .cm-method-body{padding:10px 12px;border-top:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;gap:8px}
-          .cm-call-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:9px;font-weight:800;letter-spacing:0.1em;cursor:pointer;transition:all 0.2s;align-self:flex-start}
-          .cm-call-btn.read{background:rgba(96,165,250,0.2);border:1px solid rgba(96,165,250,0.4);color:#60a5fa}.cm-call-btn.read:hover{background:rgba(96,165,250,0.3)}
-          .cm-call-btn.write{background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.4);color:#fb923c}.cm-call-btn.write:hover{background:rgba(251,146,60,0.3)}
-          .cm-method-result{font-size:10px;font-family:'Space Mono',monospace;padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:6px;color:#10b981;word-break:break-all}
-          .cm-method-result.error{color:#ef4444}
-          .cm-footer{padding:12px 24px;background:rgba(0,0,0,0.3);font-size:8px;letter-spacing:0.3em;color:rgba(255,255,255,0.15);text-align:center}
-        `}</style>
-      </motion.div>
-    </AnimatePresence>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </Dialog>
   );
 };
 
