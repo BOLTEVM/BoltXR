@@ -10,7 +10,7 @@
  * provider via LI.FI's built-in Thorchain integration.
  */
 
-import { CHAINS, ChainConfig } from "./chains";
+import { CHAINS } from "./chains";
 
 // ── Typed Interfaces ─────────────────────────────────────────────
 
@@ -169,6 +169,9 @@ const NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 // ── LI.FI API Base ───────────────────────────────────────────────
 const LIFI_API_BASE = "https://li.quest/v1";
+const LIFI_TIMEOUT_MS = 15_000;
+
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // ── SwapProvider Class ───────────────────────────────────────────
 
@@ -181,7 +184,9 @@ export class SwapProvider {
   private resolveChainId(chainKey: string): number {
     const chain = CHAINS[chainKey];
     if (!chain) throw new SwapError(`Unknown chain: ${chainKey}`, 'UNKNOWN_CHAIN');
-    if (chain.chainId === 0) throw new SwapError(`Chain ${chain.name} is not supported for swaps/bridges (non-EVM).`, 'NON_EVM_CHAIN');
+    if (chain.kind !== 'evm' || chain.chainId === 0) {
+      throw new SwapError(`${chain.name} is not supported for swaps/bridges yet.`, 'NON_EVM_CHAIN');
+    }
     return chain.chainId;
   }
 
@@ -210,6 +215,13 @@ export class SwapProvider {
    * All bridge providers are unrestricted — the API returns the optimal route.
    */
   async getQuote(params: SwapQuoteParams): Promise<SwapQuote> {
+    // LI.FI expects an integer amount in the token's smallest unit.
+    if (!/^\d+$/.test(params.fromAmount) || BigInt(params.fromAmount) === 0n) {
+      throw new SwapError('Swap amount must be a positive integer in base units.', 'INVALID_AMOUNT');
+    }
+    if (!(params.slippage > 0 && params.slippage < 0.5)) {
+      throw new SwapError('Slippage must be between 0% and 50%.', 'INVALID_SLIPPAGE');
+    }
     const fromChainId = this.resolveChainId(params.fromChainKey);
     const toChainId = this.resolveChainId(params.toChainKey);
     const fromToken = this.resolveTokenAddress(params.fromToken, params.fromChainKey);
@@ -234,9 +246,10 @@ export class SwapProvider {
       response = await fetch(url, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(LIFI_TIMEOUT_MS),
       });
-    } catch (err: any) {
-      throw new SwapError(`Network error fetching quote: ${err.message}`, 'NETWORK_ERROR');
+    } catch (err) {
+      throw new SwapError(`Network error fetching quote: ${errorMessage(err)}`, 'NETWORK_ERROR');
     }
 
     if (!response.ok) {
@@ -304,9 +317,10 @@ export class SwapProvider {
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(LIFI_TIMEOUT_MS),
       });
 
-      if (!response.ok) return null;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const data = await response.json();
       
@@ -321,9 +335,9 @@ export class SwapProvider {
         gasLimit: data.transactionRequest?.gasLimit || '60000',
         chainId,
       };
-    } catch {
-      // If approval check fails, assume approval is needed to be safe
-      return null;
+    } catch (err) {
+      // Never report "no approval needed" when we could not actually check.
+      throw new SwapError(`Could not verify token allowance: ${errorMessage(err)}`, 'APPROVAL_CHECK_FAILED');
     }
   }
 
@@ -338,6 +352,7 @@ export class SwapProvider {
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(LIFI_TIMEOUT_MS),
       });
 
       if (!response.ok) return [];
