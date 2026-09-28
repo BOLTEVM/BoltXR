@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
 import { Settings } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
+import '@/lib/xr-text';
 import Scene from './Scene';
 
-const store = createXRStore();
+// The app installs its own flag-gated emulator (lib/xr-emulation); disable the library's localhost auto-emulation.
+const store = createXRStore({ emulate: false });
 
 type NavigatorWithXR = Navigator & {
     xr?: {
@@ -21,6 +23,7 @@ export default function WalletXR({ onExit }: { onExit: () => void }) {
     const [mounted, setMounted] = useState(false);
     const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
     const [emulationEnabled, setEmulationEnabled] = useState(false);
+    const [contextLost, setContextLost] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -123,9 +126,37 @@ export default function WalletXR({ onExit }: { onExit: () => void }) {
                 )}
             </div>
 
-            <Canvas shadows camera={{ position: [0, 1.6, 3], fov: 50 }}>
+            {contextLost && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#020617]/90 p-4" role="alert">
+                    <div className="glass rounded-2xl p-6 max-w-sm text-center flex flex-col gap-4">
+                        <h2 className="text-2xl">3D view stopped</h2>
+                        <p className="text-sm text-slate-400">
+                            The graphics driver reset, so the 3D scene can&apos;t be drawn. Your vault is unaffected. Reload to continue, or switch to Hand Tracking in Settings.
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                            <button type="button" className="btn" onClick={() => setShowSettings(true)}>Settings</button>
+                            <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>Reload</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <Canvas
+                shadows
+                camera={{ position: [0, 1.6, 3], fov: 50 }}
+                onCreated={({ gl }) => {
+                    gl.domElement.addEventListener('webglcontextlost', (e) => {
+                        e.preventDefault();
+                        setContextLost(true);
+                    });
+                    gl.domElement.addEventListener('webglcontextrestored', () => setContextLost(false));
+                }}
+            >
                 <XR store={store}>
-                    <Scene />
+                    {/* Keep the DOM controls usable while 3D fonts/assets load. */}
+                    <Suspense fallback={null}>
+                        <Scene />
+                    </Suspense>
                 </XR>
             </Canvas>
         </div>

@@ -69,6 +69,7 @@
     "thirdweb": "^5.116.1",
     "three": "^0.170.0",
     "tiny-secp256k1": "^2.2.3",
+    "troika-three-text": "0.52.4",
     "tronweb": "^6.0.0"
   },
   "devDependencies": {

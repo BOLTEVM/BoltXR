@@ -1,7 +1,25 @@
 import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, Float, useTexture } from '@react-three/drei';
-import { Mesh, MeshStandardMaterial, Group, Vector3 } from 'three';
+import { Mesh, Group, Vector3 } from 'three';
+import SafeBoundary from './xr/SafeBoundary';
+
+/** Logo faces on both sides of the coin. Loaded in isolation: remote logos may fail (CORS/offline). */
+function CoinFaces({ logo }: { logo: string }) {
+    const texture = useTexture(logo);
+    return (
+        <>
+            <mesh position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.22, 32]} />
+                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
+            </mesh>
+            <mesh position={[0, -0.041, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.22, 32]} />
+                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
+            </mesh>
+        </>
+    );
+}
 
 interface Token3DProps {
     symbol: string;
@@ -21,14 +39,6 @@ export default function Token3D({ symbol, color, balance, network, position, onC
     const groupRef = useRef<Group>(null);
     const [hovered, setHovered] = useState(false);
     const [isGrabbed, setIsGrabbed] = useState(false);
-
-    // Load texture
-    let texture: any = null;
-    try {
-        texture = useTexture(logo);
-    } catch (e) {
-        console.warn("Failed to load logo texture:", logo);
-    }
 
     useFrame((state, delta) => {
         if (meshRef.current) {
@@ -56,34 +66,31 @@ export default function Token3D({ symbol, color, balance, network, position, onC
         }
     });
 
-    const handleSelectStart = () => {
-        setIsGrabbed(true);
-        if (onGrab) onGrab(symbol);
-    };
 
-    const handleSelectEnd = () => {
-        setIsGrabbed(false);
-        if (onDrop && groupRef.current) {
-            onDrop(symbol, [groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z]);
-        }
-    };
 
     return (
         <Float floatIntensity={isGrabbed ? 0 : 1} speed={2} rotationIntensity={isGrabbed ? 0 : 0.5}>
             <group 
                 ref={groupRef} 
                 position={position}
-                onPointerDown={(e) => {
+                onClick={(e) => {
+                    // The whole coin (body, halo, labels) is the target: a spinning
+                    // coin seen edge-on is otherwise nearly impossible to hit.
                     e.stopPropagation();
-                    handleSelectStart();
+                    onClick();
                 }}
-                onPointerUp={(e) => {
+                onPointerOver={(e) => {
                     e.stopPropagation();
-                    handleSelectEnd();
+                    setHovered(true);
+                    document.body.style.cursor = 'pointer';
                 }}
-                onPointerOver={() => setHovered(true)}
-                onPointerOut={() => setHovered(false)}
+                onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
             >
+                <mesh visible={false}>
+                    <circleGeometry args={[0.42, 24]} />
+                    <meshBasicMaterial />
+                </mesh>
+
                 {/* Error Halo */}
                 {status === 'error' && (
                     <mesh position={[0, 0, -0.05]}>
@@ -96,10 +103,6 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                 <mesh
                     ref={meshRef}
                     scale={hovered || isGrabbed ? 1.2 : 1}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onClick();
-                    }}
                     rotation={[Math.PI / 2, 0, 0]}
                 >
                     <cylinderGeometry args={[0.3, 0.3, 0.08, 32]} />
@@ -111,21 +114,9 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                         emissiveIntensity={hovered || status === 'error' || isGrabbed ? 0.8 : 0.2}
                     />
 
-                    {/* Logo Face (Front) */}
-                    {texture && (
-                        <mesh position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <circleGeometry args={[0.22, 32]} />
-                            <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-                        </mesh>
-                    )}
+                    {/* Logo faces (both sides) */}
+                    <SafeBoundary><CoinFaces logo={logo} /></SafeBoundary>
 
-                    {/* Logo Face (Back) */}
-                    {texture && (
-                        <mesh position={[0, -0.041, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                            <circleGeometry args={[0.22, 32]} />
-                            <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-                        </mesh>
-                    )}
                 </mesh>
 
                 {/* Token Symbol (Floating Label) */}
@@ -135,7 +126,6 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                     color="white"
                     anchorX="center"
                     anchorY="bottom"
-                    font="https://fonts.gstatic.com/s/outfit/v11/Q_k79p9L6NqT0EOf07A.woff"
                 >
                     {symbol}
                 </Text>
@@ -171,7 +161,7 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                             anchorX="center"
                             anchorY="middle"
                         >
-                            {balance} {symbol}
+                            {status === 'success' ? `${balance} ${symbol}` : status === 'loading' ? 'LOADING' : 'OFFLINE'}
                         </Text>
                     </group>
                 )}

@@ -6,11 +6,9 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
 import { Text, RoundedBox, Float } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
 import { CanvasTexture, Group } from 'three';
-import { generateQRCanvas, generateAddressQR } from '@/lib/qr-codec';
+import { generateQRCanvas, buildAddressPayload } from '@/lib/qr-codec';
 
 interface QRPanel3DProps {
   address: string | null;
@@ -24,8 +22,7 @@ function Button3D({ label, onClick, position, color = "#444", width = 0.5 }: {
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <Interactive onSelect={onClick}>
-      <group position={position} onPointerDown={onClick} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+      <group position={position} onClick={(e) => { e.stopPropagation(); onClick(); }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
         <RoundedBox args={[width, 0.12, 0.02]} radius={0.02} smoothness={4} scale={hovered ? 1.05 : 1}>
           <meshStandardMaterial color={hovered ? "#fff" : color} emissive={hovered ? "#fff" : color} emissiveIntensity={hovered ? 0.5 : 0.2} metalness={0.8} roughness={0.2} />
         </RoundedBox>
@@ -33,7 +30,6 @@ function Button3D({ label, onClick, position, color = "#444", width = 0.5 }: {
           {label}
         </Text>
       </group>
-    </Interactive>
   );
 }
 
@@ -45,7 +41,7 @@ export default function QRPanel3D({ address, chainId = 'ethereum', onClose, onSc
   // Generate QR texture when address changes
   useEffect(() => {
     if (!address) return;
-    const data = `ethereum:${address}${chainId ? `@${chainId}` : ''}`;
+    const data = buildAddressPayload(address, chainId);
     generateQRCanvas(data, 256).then(canvas => {
       const texture = new CanvasTexture(canvas);
       texture.needsUpdate = true;
@@ -108,14 +104,12 @@ export default function QRPanel3D({ address, chainId = 'ethereum', onClose, onSc
         </Text>
 
         {/* Interactive buttons */}
-        <Interactive onSelect={handleCopy}>
-          <group position={[0, -0.24, 0.03]} onPointerDown={handleCopy}>
+          <group position={[0, -0.24, 0.03]} onClick={(e) => { e.stopPropagation(); handleCopy(); }}>
             <mesh visible={false}>
               <planeGeometry args={[0.7, 0.08]} />
               <meshBasicMaterial transparent opacity={0} />
             </mesh>
           </group>
-        </Interactive>
 
         {/* Action Buttons */}
         {onScanActivate && (

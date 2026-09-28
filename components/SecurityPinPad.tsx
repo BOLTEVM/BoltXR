@@ -1,183 +1,123 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Text, Float, RoundedBox } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
-import { Group, MeshStandardMaterial } from 'three';
+import { Text, RoundedBox } from '@react-three/drei';
+import { Group } from 'three';
+import Button3D, { XR_THEME } from './xr/Button3D';
+import { useCountdown } from '@/hooks/useCountdown';
 
 interface SecurityPinPadProps {
   onConfirm: (pin: string) => void;
   onCancel: () => void;
   title?: string;
+  subtitle?: string;
   error?: string;
   lockoutUntil?: number | null;
+  minLength?: number;
+  busy?: boolean;
 }
 
-function PinButton({ value, onSelect, position, disabled }: { value: string; onSelect: (v: string) => void; position: [number, number, number]; disabled?: boolean }) {
-  const [hovered, setHovered] = useState(false);
-  const [pressed, setPressed] = useState(false);
+const KEYS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['CLR', '0', 'DEL'],
+];
+const MAX_LENGTH = 12;
 
-  return (
-    <Interactive
-      onSelectStart={() => { if (!disabled) { setPressed(true); onSelect(value); } }}
-      onSelectEnd={() => setPressed(false)}
-      onHover={() => !disabled && setHovered(true)}
-      onBlur={() => { setHovered(false); setPressed(false); }}
-    >
-      <group position={position}>
-        <RoundedBox args={[0.2, 0.2, 0.05]} radius={0.02} smoothness={4}>
-          <meshStandardMaterial
-            color={disabled ? "#0f172a" : (pressed ? "#8b5cf6" : (hovered ? "#4c1d95" : "#1e293b"))}
-            emissive={pressed ? "#a78bfa" : (hovered ? "#6d28d9" : "#000")}
-            emissiveIntensity={hovered ? 0.5 : 0}
-            metalness={0.8}
-            roughness={0.2}
-            transparent={disabled}
-            opacity={disabled ? 0.3 : 1}
-          />
-        </RoundedBox>
-        <Text
-          position={[0, 0, 0.03]}
-          fontSize={0.08}
-          color={disabled ? "#334155" : "white"}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {value}
-        </Text>
-      </group>
-    </Interactive>
-  );
-}
-
-export default function SecurityPinPad({ onConfirm, onCancel, title = "ENTER SECURITY PIN", error, lockoutUntil }: SecurityPinPadProps) {
-  const [pin, setPin] = useState("");
+export default function SecurityPinPad({
+  onConfirm, onCancel, title = 'ENTER SECURITY PIN', subtitle, error, lockoutUntil, minLength = 4, busy = false,
+}: SecurityPinPadProps) {
+  const [pin, setPin] = useState('');
   const groupRef = useRef<Group>(null);
   const shakeRef = useRef(0);
-  const [timeRemaining, setTimeRemaining] = useState(0);
+  const secondsLeft = useCountdown(lockoutUntil);
+  const lockedOut = secondsLeft > 0;
+  const disabled = lockedOut || busy;
 
-  const isLockedOut = !!(lockoutUntil && Date.now() < lockoutUntil);
-
+  // Shake animation (visual only — no React state per frame)
   useFrame((state, delta) => {
-    // Shake animation logic
+    if (!groupRef.current) return;
     if (shakeRef.current > 0) {
-      shakeRef.current -= delta * 5;
-      if (groupRef.current) {
-        groupRef.current.position.x = Math.sin(state.clock.elapsedTime * 50) * 0.05 * shakeRef.current;
-      }
-    } else if (groupRef.current) {
+      shakeRef.current = Math.max(0, shakeRef.current - delta * 4);
+      groupRef.current.position.x = Math.sin(state.clock.elapsedTime * 50) * 0.04 * shakeRef.current;
+    } else {
       groupRef.current.position.x = 0;
-    }
-
-    // Lockout timer logic
-    if (isLockedOut) {
-      setTimeRemaining(Math.ceil((lockoutUntil! - Date.now()) / 1000));
     }
   });
 
-  // Trigger shake on error change
   useEffect(() => {
     if (error) shakeRef.current = 1;
   }, [error]);
 
-  const handleSelect = (val: string) => {
-    if (isLockedOut) return;
+  const submit = useCallback(() => {
+    if (disabled || pin.length < minLength) return;
+    onConfirm(pin);
+    setPin('');
+  }, [disabled, pin, minLength, onConfirm]);
 
-    if (val === "CLR") {
-      setPin("");
-    } else if (val === "OK") {
-      if (pin.length >= 4) {
-        onConfirm(pin);
-        setPin(""); // Clear after attempt
-      }
-    } else if (pin.length < 8) {
-      setPin(prev => prev + val);
-    }
-  };
+  const press = useCallback((key: string) => {
+    if (disabled) return;
+    if (key === 'CLR') setPin('');
+    else if (key === 'DEL') setPin(p => p.slice(0, -1));
+    else setPin(p => (p.length < MAX_LENGTH ? p + key : p));
+  }, [disabled]);
 
-  const buttons = [
-    ["1", "2", "3"],
-    ["4", "5", "6"],
-    ["7", "8", "9"],
-    ["CLR", "0", "OK"]
-  ];
+  // Physical keyboard support on desktop.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (/^\d$/.test(e.key)) press(e.key);
+      else if (e.key === 'Backspace') press('DEL');
+      else if (e.key === 'Enter') submit();
+      else if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [press, submit, onCancel]);
+
+  const dots = Array.from({ length: Math.max(minLength, pin.length) }, (_, i) => (i < pin.length ? '*' : '-')).join(' ');
+  const status = lockedOut
+    ? `TOO MANY ATTEMPTS · RETRY IN ${secondsLeft}s`
+    : busy ? 'VERIFYING…' : error || subtitle || `ENTER AT LEAST ${minLength} DIGITS`;
 
   return (
     <group ref={groupRef}>
-      <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
-        {/* Background Panel */}
-        <RoundedBox args={[1, 1.4, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
-          <meshStandardMaterial
-            color={isLockedOut ? "#450a0a" : "#0f172a"}
-            transparent
-            opacity={0.9}
-            metalness={0.9}
-            roughness={0.1}
+      <RoundedBox args={[1.05, 1.6, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
+        <meshStandardMaterial color={lockedOut ? '#450a0a' : XR_THEME.surface} transparent opacity={0.94} metalness={0.8} roughness={0.2} />
+      </RoundedBox>
+
+      <Text position={[0, 0.68, 0.01]} fontSize={0.065} color={lockedOut ? XR_THEME.danger : XR_THEME.text} anchorX="center">
+        {lockedOut ? 'VAULT LOCKOUT' : title}
+      </Text>
+      <Text position={[0, 0.54, 0.01]} fontSize={0.09} color={error ? XR_THEME.danger : '#a78bfa'} anchorX="center" letterSpacing={0.1}>
+        {dots}
+      </Text>
+      <Text position={[0, 0.43, 0.01]} fontSize={0.032} color={error || lockedOut ? XR_THEME.danger : XR_THEME.muted} anchorX="center" maxWidth={0.95} textAlign="center">
+        {status}
+      </Text>
+
+      <group position={[0, 0.24, 0.01]}>
+        {KEYS.map((row, i) => row.map((key, j) => (
+          <Button3D
+            key={key}
+            label={key}
+            onPress={() => press(key)}
+            position={[(j - 1) * 0.27, -i * 0.21, 0]}
+            width={0.24}
+            height={0.18}
+            fontSize={key.length > 1 ? 0.045 : 0.075}
+            color={key.length > 1 ? XR_THEME.neutral : XR_THEME.raised}
+            disabled={disabled}
           />
-        </RoundedBox>
+        )))}
+      </group>
 
-        {/* Title */}
-        <Text
-          position={[0, 0.55, 0.03]}
-          fontSize={0.06}
-          color={isLockedOut ? "#ef4444" : "white"}
-          anchorX="center"
-        >
-          {isLockedOut ? "SYSTEM LOCKOUT" : title}
-        </Text>
-
-        {/* PIN Display (Dots) or Lockout Timer */}
-        <group position={[0, 0.35, 0.03]}>
-          {isLockedOut ? (
-            <Text
-              fontSize={0.1}
-              color="#ef4444"
-            >
-              {timeRemaining}s
-            </Text>
-          ) : (
-            <Text
-              fontSize={0.12}
-              color={error ? "#ef4444" : "#8b5cf6"}
-              letterSpacing={0.2}
-            >
-              {pin.split("").map(() => "•").join("") || "----"}
-            </Text>
-          )}
-          {error && !isLockedOut && (
-            <Text position={[0, -0.15, 0]} fontSize={0.04} color="#ef4444">
-              {error}
-            </Text>
-          )}
-        </group>
-
-        {/* Keypad Grid */}
-        <group position={[0, -0.15, 0.03]}>
-          {buttons.map((row, i) => (
-            <group key={i} position={[0, -i * 0.25, 0]}>
-              {row.map((val, j) => (
-                <PinButton
-                  key={val}
-                  value={val}
-                  position={[(j - 1) * 0.25, 0, 0]}
-                  onSelect={handleSelect}
-                  disabled={isLockedOut}
-                />
-              ))}
-            </group>
-          ))}
-        </group>
-
-        {/* Cancel Button */}
-        <Interactive onSelect={onCancel}>
-          <group position={[0, -0.6, 0.03]}>
-            <Text fontSize={0.04} color="#94a3b8">
-              CANCEL
-            </Text>
-          </group>
-        </Interactive>
-      </Float>
+      <Button3D label="CANCEL" onPress={onCancel} position={[-0.26, -0.68, 0.01]} width={0.46} height={0.14} />
+      <Button3D label="CONFIRM" onPress={submit} position={[0.26, -0.68, 0.01]} width={0.46} height={0.14}
+        color={XR_THEME.brand} disabled={disabled || pin.length < minLength} />
     </group>
   );
 }
