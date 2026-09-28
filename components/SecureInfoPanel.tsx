@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { Float, RoundedBox, Text } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
-import { Group } from 'three';
+import { useState } from 'react';
+import { RoundedBox, Text } from '@react-three/drei';
+import Button3D, { XR_THEME } from './xr/Button3D';
 
 interface SecureInfoPanelProps {
   title: string;
@@ -11,88 +10,52 @@ interface SecureInfoPanelProps {
   onClose: () => void;
 }
 
+/** Shows the recovery phrase: hidden until revealed, closable only after reveal. */
 export default function SecureInfoPanel({ title, content, onClose }: SecureInfoPanelProps) {
   const [revealed, setRevealed] = useState(false);
-  const groupRef = useRef<Group>(null);
-
-  // Split content into chunks for display (e.g., 4 words per line for mnemonic)
-  const words = content.split(' ');
-  const lines = [];
-  for (let i = 0; i < words.length; i += 4) {
-    lines.push(words.slice(i, i + 4).join(' '));
-  }
+  const words = content.trim().split(/\s+/);
 
   return (
-    <group ref={groupRef}>
-      <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
-        {/* Background Panel */}
-        <RoundedBox args={[1.5, 1.2, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
-          <meshStandardMaterial
-            color="#0f172a"
-            transparent
-            opacity={0.95}
-            metalness={0.9}
-            roughness={0.1}
-          />
+    <group>
+      <RoundedBox args={[1.7, 1.4, 0.05]} radius={0.05} smoothness={4} position={[0, 0, -0.05]}>
+        <meshStandardMaterial color={XR_THEME.surface} transparent opacity={0.96} metalness={0.8} roughness={0.2} />
+      </RoundedBox>
+
+      <Text position={[0, 0.58, 0.01]} fontSize={0.075} color="#a78bfa" anchorX="center">{title}</Text>
+      <Text position={[0, 0.46, 0.01]} fontSize={0.034} color={XR_THEME.danger} anchorX="center" maxWidth={1.5} textAlign="center">
+        WRITE THESE WORDS DOWN IN ORDER. ANYONE WITH THEM CONTROLS YOUR FUNDS.
+      </Text>
+
+      <group position={[0, 0.03, 0.01]}>
+        <RoundedBox args={[1.5, 0.62, 0.02]} radius={0.03} smoothness={4} position={[0, 0, -0.015]}>
+          <meshStandardMaterial color="#020617" />
         </RoundedBox>
-
-        {/* Title */}
-        <Text
-          position={[0, 0.45, 0.03]}
-          fontSize={0.08}
-          color="#a855f7"
-          anchorX="center"
-        >
-          {title}
-        </Text>
-
-        {/* Warning Text */}
-        <Text
-          position={[0, 0.30, 0.03]}
-          fontSize={0.04}
-          color="#ef4444"
-          anchorX="center"
-        >
-          CRITICAL: DO NOT SHARE OR LOSE THIS INFORMATION
-        </Text>
-
-        {/* Content Area */}
-        <group position={[0, 0, 0.03]}>
-          <RoundedBox args={[1.3, 0.5, 0.02]} radius={0.02} smoothness={4} position={[0, 0, -0.01]}>
-            <meshStandardMaterial color="#020617" />
-          </RoundedBox>
-
-          {!revealed ? (
-            <Interactive onSelect={() => setRevealed(true)}>
-              <group>
-                <Text position={[0, 0, 0.01]} fontSize={0.06} color="#94a3b8">
-                  TAP TO REVEAL
-                </Text>
-              </group>
-            </Interactive>
-          ) : (
-            <group position={[0, Math.max(0.1, (lines.length - 1) * 0.05), 0.01]}>
-              {lines.map((line, i) => (
-                <Text key={i} position={[0, -i * 0.1, 0]} fontSize={0.05} color="white">
-                  {line}
-                </Text>
-              ))}
-            </group>
-          )}
-        </group>
-
-        {/* Close Button */}
-        <Interactive onSelect={onClose}>
-          <group position={[0, -0.45, 0.03]}>
-            <RoundedBox args={[0.5, 0.15, 0.02]} radius={0.02} smoothness={4}>
-              <meshStandardMaterial color="#4c1d95" emissive="#6d28d9" emissiveIntensity={0.2} />
-            </RoundedBox>
-            <Text position={[0, 0, 0.02]} fontSize={0.04} color="white">
-              I HAVE SAVED IT SECURELY
+        {revealed ? (
+          words.map((word, i) => (
+            <Text
+              key={i}
+              position={[((i % 3) - 1) * 0.48, 0.22 - Math.floor(i / 3) * (0.44 / Math.max(1, Math.ceil(words.length / 3) - 1)), 0.01]}
+              fontSize={0.045}
+              color={XR_THEME.text}
+              anchorX="center"
+            >
+              {`${i + 1}. ${word}`}
             </Text>
-          </group>
-        </Interactive>
-      </Float>
+          ))
+        ) : (
+          <Button3D label="TAP TO REVEAL" onPress={() => setRevealed(true)} width={0.7} height={0.16} color={XR_THEME.neutral} />
+        )}
+      </group>
+
+      <Button3D
+        label={revealed ? 'I HAVE SAVED IT SECURELY' : 'REVEAL THE PHRASE FIRST'}
+        onPress={onClose}
+        position={[0, -0.52, 0.01]}
+        width={0.9}
+        height={0.15}
+        color={XR_THEME.brand}
+        disabled={!revealed}
+      />
     </group>
   );
 }

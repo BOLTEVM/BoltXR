@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { Text, useTexture, RoundedBox } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
+import SafeBoundary from './xr/SafeBoundary';
 
 interface DashboardProps {
     account: string | null;
     isLocked?: boolean;
+    isVaultSetup?: boolean;
+    onLock?: () => void;
     onConnect: () => void;
     onShowQR?: () => void;
     onShowContracts?: () => void;
@@ -15,8 +17,7 @@ interface DashboardProps {
 function DashBtn({ label, onClick, position, color }: { label: string; onClick: () => void; position: [number, number, number]; color: string }) {
     const [hovered, setHovered] = useState(false);
     return (
-        <Interactive onSelect={onClick}>
-            <group position={position} onPointerDown={onClick} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+            <group position={position} onClick={(e) => { e.stopPropagation(); onClick(); }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
                 <RoundedBox args={[0.5, 0.15, 0.02]} radius={0.02} smoothness={4} scale={hovered ? 1.05 : 1}>
                     <meshStandardMaterial color={hovered ? "#fff" : color} emissive={hovered ? "#fff" : color} emissiveIntensity={hovered ? 0.5 : 0.2} metalness={0.8} roughness={0.2} />
                 </RoundedBox>
@@ -24,20 +25,24 @@ function DashBtn({ label, onClick, position, color }: { label: string; onClick: 
                     {label}
                 </Text>
             </group>
-        </Interactive>
     );
 }
 
-export default function Dashboard({ account, isLocked, onConnect, onShowQR, onShowContracts }: DashboardProps) {
+function Logo() {
     const logoTexture = useTexture('/0logov3.png');
+    return (
+        <mesh position={[0, 0.75, 0.02]}>
+            <planeGeometry args={[0.4, 0.4]} />
+            <meshBasicMaterial map={logoTexture} transparent />
+        </mesh>
+    );
+}
 
+export default function Dashboard({ account, isLocked, isVaultSetup = true, onConnect, onLock, onShowQR, onShowContracts }: DashboardProps) {
     return (
         <group>
             {/* Logo */}
-            <mesh position={[0, 0.75, 0.02]}>
-                <planeGeometry args={[0.4, 0.4]} />
-                <meshBasicMaterial map={logoTexture} transparent />
-            </mesh>
+            <SafeBoundary><Logo /></SafeBoundary>
             {/* Glossy Panel */}
             <mesh>
                 <planeGeometry args={[2.5, 1.2]} />
@@ -61,7 +66,7 @@ export default function Dashboard({ account, isLocked, onConnect, onShowQR, onSh
             </Text>
 
             <Text position={[0, -0.1, 0.02]} fontSize={0.1} color="#94a3b8" anchorX="center" anchorY="top">
-                {account ? `WALLET ACTIVE` : isLocked ? "VAULT LOCKED" : "WAITING FOR CONNECTION"}
+                {account ? `WALLET ACTIVE` : !isVaultSetup ? "NO VAULT ON THIS DEVICE" : isLocked ? "VAULT LOCKED" : "WAITING FOR CONNECTION"}
             </Text>
 
             {account ? (
@@ -70,8 +75,9 @@ export default function Dashboard({ account, isLocked, onConnect, onShowQR, onSh
                         {account.slice(0, 6)}...{account.slice(-4)}
                     </Text>
                     <group position={[0, -0.55, 0.02]}>
-                        {onShowQR && <DashBtn label="QR" onClick={onShowQR} position={[-0.32, 0, 0]} color="#a855f7" />}
-                        {onShowContracts && <DashBtn label="CONTRACTS" onClick={onShowContracts} position={[0.32, 0, 0]} color="#10b981" />}
+                        {onShowQR && <DashBtn label="RECEIVE QR" onClick={onShowQR} position={[-0.56, 0, 0]} color="#a855f7" />}
+                        {onShowContracts && <DashBtn label="CONTRACTS" onClick={onShowContracts} position={[0, 0, 0]} color="#10b981" />}
+                        {onLock && <DashBtn label="LOCK" onClick={onLock} position={[0.56, 0, 0]} color="#334155" />}
                     </group>
                 </>
             ) : (
@@ -81,7 +87,7 @@ export default function Dashboard({ account, isLocked, onConnect, onShowQR, onSh
                         <meshStandardMaterial color="#6366f1" />
                      </mesh>
                      <Text fontSize={0.06} color="white" position={[0, 0, 0.01]}>
-                        {isLocked ? "UNLOCK VAULT" : "CONNECT"}
+                        {!isVaultSetup ? "SET UP VAULT" : "UNLOCK VAULT"}
                      </Text>
                 </group>
             )}

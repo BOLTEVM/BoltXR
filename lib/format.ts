@@ -27,10 +27,14 @@ export const truncateAddress = (address: string | null | undefined, head = 6, ta
   return `${address.slice(0, head)}…${address.slice(-tail)}`;
 };
 
+const NETWORK_ERROR = /failed to fetch|networkerror|network request failed|err_|timeout|timed out|aborted/i;
+
 export const errorMessage = (e: unknown): string => {
-  if (e instanceof Error) return e.message;
-  if (typeof e === 'string') return e;
-  return 'Something went wrong';
+  const raw = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
+  if (!raw) return 'Something went wrong';
+  // Browser fetch failures are opaque; say what the user can actually do.
+  if (NETWORK_ERROR.test(raw)) return 'Network unreachable — check your connection and try again.';
+  return raw;
 };
 
 /** Short, human-friendly relative time ("just now", "5m ago", "2d ago"). */

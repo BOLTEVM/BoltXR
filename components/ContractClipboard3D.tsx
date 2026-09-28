@@ -9,7 +9,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Text, RoundedBox, Float } from '@react-three/drei';
-import { Interactive } from '@react-three/xr';
 import { BoltwalletCore, ContractData } from '@/lib/boltows/ows-core';
 import { parseABIMethods } from '@/lib/abi-fetcher';
 
@@ -30,8 +29,7 @@ function Btn3D({ label, onClick, position, color = "#444", w = 0.55 }: {
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <Interactive onSelect={onClick}>
-      <group position={position} onPointerDown={onClick} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+      <group position={position} onClick={(e) => { e.stopPropagation(); onClick(); }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
         <RoundedBox args={[w, 0.12, 0.02]} radius={0.02} smoothness={4} scale={hovered ? 1.05 : 1}>
           <meshStandardMaterial color={hovered ? "#fff" : color} emissive={hovered ? "#fff" : color} emissiveIntensity={hovered ? 0.5 : 0.15} metalness={0.8} roughness={0.2} />
         </RoundedBox>
@@ -39,7 +37,6 @@ function Btn3D({ label, onClick, position, color = "#444", w = 0.55 }: {
           {label}
         </Text>
       </group>
-    </Interactive>
   );
 }
 
@@ -49,8 +46,7 @@ function TabBtn({ label, active, onClick, position }: {
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <Interactive onSelect={onClick}>
-      <group position={position} onPointerDown={onClick} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
+      <group position={position} onClick={(e) => { e.stopPropagation(); onClick(); }} onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
         <RoundedBox args={[0.32, 0.1, 0.01]} radius={0.02} smoothness={4}>
           <meshStandardMaterial
             color={active ? "#10b981" : "#1e293b"}
@@ -63,7 +59,6 @@ function TabBtn({ label, active, onClick, position }: {
           {label}
         </Text>
       </group>
-    </Interactive>
   );
 }
 
@@ -251,8 +246,7 @@ export default function ContractClipboard3D({ chainId, walletId, onClose, onOpen
                     const isSelected = selected?.address === c.address;
                     return (
                       <group key={c.address + i} position={[0, yPos, 0]}>
-                        <Interactive onSelect={() => { setSelected(c); setTab('interact'); }}>
-                          <group onPointerDown={() => { setSelected(c); setTab('interact'); }}>
+                          <group onClick={(e) => { e.stopPropagation(); setSelected(c); setTab('interact'); }}>
                             <RoundedBox args={[1.0, 0.14, 0.01]} radius={0.02} smoothness={4}>
                               <meshStandardMaterial
                                 color={isSelected ? "#064e3b" : "#1e293b"}
@@ -268,19 +262,18 @@ export default function ContractClipboard3D({ chainId, walletId, onClose, onOpen
                               {truncAddr(c.address)} · {c.chainId}
                             </Text>
                           </group>
-                        </Interactive>
-                        <Btn3D label="✕" onClick={() => handleDelete(c.address)} position={[0.42, 0, 0]} color="#7f1d1d" w={0.1} />
+                        <Btn3D label="X" onClick={() => handleDelete(c.address)} position={[0.42, 0, 0]} color="#7f1d1d" w={0.1} />
                       </group>
                     );
                   })}
                   {/* Scroll controls */}
                   {contracts.length > 4 && (
                     <group position={[0, -0.45, 0]}>
-                      <Btn3D label="▲" onClick={() => setScrollOffset(Math.max(0, scrollOffset - 1))} position={[-0.15, 0, 0]} color="#334155" w={0.2} />
+                      <Btn3D label="UP" onClick={() => setScrollOffset(Math.max(0, scrollOffset - 1))} position={[-0.15, 0, 0]} color="#334155" w={0.2} />
                       <Text position={[0, 0, 0]} fontSize={0.02} color="#64748b" anchorX="center">
                         {scrollOffset + 1}-{Math.min(scrollOffset + 4, contracts.length)} / {contracts.length}
                       </Text>
-                      <Btn3D label="▼" onClick={() => setScrollOffset(Math.min(contracts.length - 4, scrollOffset + 1))} position={[0.15, 0, 0]} color="#334155" w={0.2} />
+                      <Btn3D label="DOWN" onClick={() => setScrollOffset(Math.min(contracts.length - 4, scrollOffset + 1))} position={[0.15, 0, 0]} color="#334155" w={0.2} />
                     </group>
                   )}
                 </group>
@@ -328,7 +321,7 @@ export default function ContractClipboard3D({ chainId, walletId, onClose, onOpen
                   </Text>
                   {writeMethods.map((m, i) => (
                     <Text key={m.name} position={[-0.4, -0.38 - i * 0.06, 0]} fontSize={0.022} color="#94a3b8" anchorX="left">
-                      ▸ {m.name}({m.inputs.map(inp => inp.type).join(', ')})
+                      - {m.name}({m.inputs.map(inp => inp.type).join(', ')})
                     </Text>
                   ))}
                   <Text position={[0, -0.58, 0]} fontSize={0.018} color="#64748b" anchorX="center" maxWidth={0.8}>

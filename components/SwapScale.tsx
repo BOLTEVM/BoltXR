@@ -1,16 +1,17 @@
 'use client';
 
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, Float, RoundedBox } from '@react-three/drei';
-import { Mesh, Group, Vector3, MathUtils } from 'three';
+import { Group, MathUtils } from 'three';
+import type { Token } from '@/hooks/useWallet';
 
 interface SwapScaleProps {
-  inputToken: any | null;
-  targetToken: any | null;
-  onSelectTarget: (token: any) => void;
+  inputToken: Token | null;
+  targetToken: Token | null;
+  onSelectTarget: (token: Token) => void;
   onConfirm: () => void;
-  availableTokens: any[];
+  availableTokens: Token[];
 }
 
 export default function SwapScale({ 
@@ -25,7 +26,6 @@ export default function SwapScale({
   const rightPanRef = useRef<Group>(null);
 
   // Animation state for the scale tipping
-  const [targetRotation, setTargetRotation] = useState(0);
   const currentRotation = useRef(0);
 
   // Calculate route type — all routing via unified LI.FI SwapProvider
@@ -38,10 +38,9 @@ export default function SwapScale({
   useFrame((state, delta) => {
     // Determine target rotation based on whether we have an input token
     const newTarget = inputToken ? (targetToken ? 0 : -0.2) : 0;
-    setTargetRotation(newTarget);
 
     // Smoothly animate the arm rotation
-    currentRotation.current = MathUtils.lerp(currentRotation.current, targetRotation, delta * 2);
+    currentRotation.current = MathUtils.lerp(currentRotation.current, newTarget, delta * 2);
     if (armRef.current) {
       armRef.current.rotation.z = currentRotation.current;
     }
@@ -110,7 +109,7 @@ export default function SwapScale({
             <RoundedBox args={[1.6, 0.8, 0.05]} radius={0.05}>
                 <meshStandardMaterial color="#0f172a" transparent opacity={0.9} metalness={0.8} />
             </RoundedBox>
-            <Text position={[0, 0.3, 0.03]} fontSize={0.06} color="white" font="/fonts/Inter-Bold.woff">SELECT TARGET ASSET</Text>
+            <Text position={[0, 0.3, 0.03]} fontSize={0.06} color="white">SELECT TARGET ASSET</Text>
             
             <group position={[-0.5, 0, 0.03]}>
               {availableTokens.filter(t => t.symbol !== inputToken.symbol).slice(0, 3).map((token, i) => (
@@ -140,7 +139,7 @@ export default function SwapScale({
             </RoundedBox>
             
             <Text position={[0, 0.25, 0.03]} fontSize={0.07} color="white">
-                SWAP {inputToken.symbol} → {targetToken.symbol}
+                SWAP {inputToken.symbol} TO {targetToken.symbol}
             </Text>
  
             <Text position={[0, 0.1, 0.03]} fontSize={0.04} color="#10b981">
@@ -156,7 +155,7 @@ export default function SwapScale({
                 <RoundedBox args={[0.8, 0.2, 0.05]} radius={0.05}>
                     <meshStandardMaterial color="#10b981" emissive="#10b981" emissiveIntensity={0.2} />
                 </RoundedBox>
-                <Text position={[0, 0, 0.03]} fontSize={0.06} color="white" font="/fonts/Inter-Black.woff">EXECUTE CROSS-CHAIN SWAP</Text>
+                <Text position={[0, 0, 0.03]} fontSize={0.06} color="white">EXECUTE CROSS-CHAIN SWAP</Text>
             </group>
  
             <Text position={[0, -0.35, 0.03]} fontSize={0.03} color="#64748b">

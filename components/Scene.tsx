@@ -1,8 +1,9 @@
 'use client';
 
-import { Suspense, useState } from 'react';
-import { Environment, Grid, OrbitControls, Stars } from '@react-three/drei';
-import { useWallet } from '@/hooks/useWallet';
+import { useState } from 'react';
+import { Environment, Lightformer, Grid, OrbitControls, Stars } from '@react-three/drei';
+import { useWallet, MIN_NEW_PIN_LENGTH, type Token } from '@/hooks/useWallet';
+import { errorMessage } from '@/lib/format';
 import Token3D from './Token3D';
 import Dashboard from './Dashboard';
 import TransactionPanel from './TransactionPanel';
@@ -11,21 +12,33 @@ import SecurityPinPad from './SecurityPinPad';
 import TokenRain from './TokenRain';
 import EnvironmentSelector, { EnvType } from './EnvironmentSelector';
 import SecureInfoPanel from './SecureInfoPanel';
+import SafeBoundary from './xr/SafeBoundary';
 import QRPanel3D from './QRPanel3D';
 import ContractClipboard3D from './ContractClipboard3D';
 
+const ENV_TINT: Record<EnvType, string> = {
+    space: '#6366f1',
+    sunset: '#f43f5e',
+    forest: '#10b981',
+    city: '#3b82f6',
+    rain: '#f59e0b',
+};
+
 export default function Scene() {
-    const { tokens, account, isLocked, isVaultSetup, unlock, setup, swap, lockoutUntil } = useWallet();
-    const [selectedToken, setSelectedToken] = useState<any>(null);
-    const [inputTokenForSwap, setInputTokenForSwap] = useState<any>(null);
-    const [targetTokenForSwap, setTargetTokenForSwap] = useState<any>(null);
+    const { tokens, account, isLocked, isVaultSetup, unlock, setup, swap, lock, lockoutUntil } = useWallet();
+    const [selectedChain, setSelectedChain] = useState<string | null>(null);
+    const selectedToken = tokens.find(t => t.chainKey === selectedChain) || null;
+    const [inputTokenForSwap, setInputTokenForSwap] = useState<Token | null>(null);
+    const [targetTokenForSwap, setTargetTokenForSwap] = useState<Token | null>(null);
     
     // Environment State
     const [env, setEnv] = useState<EnvType>('space');
 
     // PIN Pad State
     const [showPinPad, setShowPinPad] = useState(false);
-    const [pinPadAction, setPinPadAction] = useState<'unlock' | 'setup' | null>(null);
+    const [pinPadAction, setPinPadAction] = useState<'unlock' | 'setup' | 'setup-confirm' | null>(null);
+    const [pendingPin, setPendingPin] = useState('');
+    const [pinBusy, setPinBusy] = useState(false);
     const [pinError, setPinError] = useState("");
     
     // Secure Info State
@@ -47,25 +60,47 @@ export default function Scene() {
         }
     };
 
+    const closePinPad = () => {
+        setShowPinPad(false);
+        setPinPadAction(null);
+        setPendingPin('');
+        setPinError("");
+    };
+
     const handlePinConfirm = async (pin: string) => {
         setPinError("");
         if (pinPadAction === 'unlock') {
-            const { ok: success } = await unlock(pin);
-            if (success) {
-                setShowPinPad(false);
-                setPinPadAction(null);
-            } else {
-                setPinError("INVALID PIN");
-            }
+            setPinBusy(true);
+            const result = await unlock(pin);
+            setPinBusy(false);
+            if (result.ok) closePinPad();
+            else setPinError((result.error || 'Incorrect PIN').toUpperCase());
         } else if (pinPadAction === 'setup') {
-            const mnemonic = await setup(pin).catch(() => null);
-            if (mnemonic) {
+            if (/^(\d)\1+$/.test(pin)) {
+                setPinError("AVOID REPEATED DIGITS");
+                return;
+            }
+            setPendingPin(pin);
+            setPinPadAction('setup-confirm');
+        } else if (pinPadAction === 'setup-confirm') {
+            if (pin !== pendingPin) {
+                setPinError("PINS DO NOT MATCH — START AGAIN");
+                setPendingPin('');
+                setPinPadAction('setup');
+                return;
+            }
+            setPinBusy(true);
+            try {
+                const mnemonic = await setup(pin);
+                if (!mnemonic) throw new Error('Setup failed');
                 setSecureContent(mnemonic);
                 setShowSecureInfo(true);
-                setShowPinPad(false);
-                setPinPadAction(null);
-            } else {
-                setPinError("SETUP FAILED");
+                closePinPad();
+            } catch (e) {
+                setPinError(errorMessage(e).toUpperCase());
+                setPinPadAction('setup');
+            } finally {
+                setPinBusy(false);
             }
         }
     };
@@ -78,7 +113,7 @@ export default function Scene() {
 
         if (dist < 0.5) {
             const token = tokens.find(t => t.symbol === symbol);
-            setInputTokenForSwap(token);
+            setInputTokenForSwap(token || null);
             setTargetTokenForSwap(null);
         } else if (inputTokenForSwap?.symbol === symbol) {
             setInputTokenForSwap(null);
@@ -105,9 +140,14 @@ export default function Scene() {
             <pointLight position={[-10, 5, -5]} intensity={0.8} color={env === 'space' ? "#4c1d95" : "#f43f5e"} />
 
             {env === 'space' && <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />}
-            {env === 'rain' && <TokenRain count={40} />}
+            {env === 'rain' && <SafeBoundary><TokenRain count={40} /></SafeBoundary>}
             
-            <Environment preset={env === 'rain' ? 'city' : (env === 'space' ? 'night' : env as any)} />
+            {/* Procedural reflections: no remote HDR download, so it also works offline. */}
+            <Environment resolution={64} frames={1}>
+                <Lightformer intensity={1.2} color={ENV_TINT[env]} position={[0, 4, -6]} scale={[10, 4, 1]} />
+                <Lightformer intensity={0.6} color="#ffffff" position={[-6, 2, 2]} rotation-y={Math.PI / 2} scale={[6, 3, 1]} />
+                <Lightformer intensity={0.4} color={ENV_TINT[env]} position={[6, 1, 2]} rotation-y={-Math.PI / 2} scale={[6, 3, 1]} />
+            </Environment>
 
             <Grid 
                 args={[20, 20]} 
@@ -119,23 +159,28 @@ export default function Scene() {
 
             {/* Main Dashboard */}
             <group position={[0, 2.4, -3]}>
-                <Dashboard account={account} isLocked={isLocked} onConnect={handleConnect} onShowQR={() => setShowQR(!showQR)} onShowContracts={() => setShowClipboard(!showClipboard)} />
+                <Dashboard account={account} isLocked={isLocked} isVaultSetup={isVaultSetup} onConnect={handleConnect} onLock={() => { lock(); setSelectedChain(null); setShowQR(false); setShowClipboard(false); }} onShowQR={() => setShowQR(!showQR)} onShowContracts={() => setShowClipboard(!showClipboard)} />
             </group>
 
             {/* Environment Selector */}
-            <group position={[0, 0.5, -2.5]}>
-                <EnvironmentSelector current={env} onSelect={setEnv} />
-            </group>
+            {!showPinPad && !showSecureInfo && !selectedToken && (
+                <group position={[0, 0.5, -2.5]}>
+                    <EnvironmentSelector current={env} onSelect={setEnv} />
+                </group>
+            )}
 
             {/* Security PIN Pad (Conditional Overlay) */}
             {showPinPad && (
                 <group position={[0, 1.5, -1]}>
-                    <SecurityPinPad 
-                        title={pinPadAction === 'setup' ? "SET NEW PIN" : "UNLOCK VAULT"}
+                    <SecurityPinPad
+                        title={pinPadAction === 'unlock' ? "UNLOCK VAULT" : pinPadAction === 'setup-confirm' ? "CONFIRM NEW PIN" : "CHOOSE A NEW PIN"}
+                        subtitle={pinPadAction === 'unlock' ? undefined : `AT LEAST ${MIN_NEW_PIN_LENGTH} DIGITS · ENCRYPTS YOUR VAULT`}
+                        minLength={pinPadAction === 'unlock' ? 4 : MIN_NEW_PIN_LENGTH}
                         error={pinError}
-                        lockoutUntil={lockoutUntil}
+                        busy={pinBusy}
+                        lockoutUntil={pinPadAction === 'unlock' ? lockoutUntil : null}
                         onConfirm={handlePinConfirm}
-                        onCancel={() => { setShowPinPad(false); setPinPadAction(null); }}
+                        onCancel={closePinPad}
                     />
                 </group>
             )}
@@ -152,7 +197,7 @@ export default function Scene() {
             )}
 
             {/* Swap Scale */}
-            {!showPinPad && (
+            {!showPinPad && !showSecureInfo && !selectedToken && (
                 <group position={[0, 1.2, -1.5]}>
                     <SwapScale 
                         inputToken={inputTokenForSwap}
@@ -165,7 +210,7 @@ export default function Scene() {
             )}
 
             {/* Tokens Layout */}
-            {!showPinPad && (
+            {!showPinPad && !showSecureInfo && !selectedToken && (
                 <group position={[0, 1.2, 0]}>
                     {tokens.map((token, i) => {
                         const angle = (i - (tokens.length - 1) / 2) * 0.4;
@@ -175,7 +220,7 @@ export default function Scene() {
 
                         return (
                             <Token3D
-                                key={token.symbol}
+                                key={token.chainKey}
                                 symbol={token.symbol}
                                 color={token.color}
                                 network={token.network}
@@ -183,7 +228,7 @@ export default function Scene() {
                                 status={token.status}
                                 logo={token.logo}
                                 position={[x, 0, z]}
-                                onClick={() => setSelectedToken(token)}
+                                onClick={() => setSelectedChain(token.chainKey)}
                                 onDrop={handleDrop}
                             />
                         );
@@ -192,13 +237,13 @@ export default function Scene() {
             )}
 
             {/* Transaction Panel */}
-            {selectedToken && !showPinPad && (
-                <group position={[selectedToken.symbol === 'ETH' ? -1.5 : 1.5, 1.5, -2]} rotation={[0, selectedToken.symbol === 'ETH' ? 0.3 : -0.3, 0]}>
+            {selectedToken && !showPinPad && !showSecureInfo && (
+                // Focused view: centered in front of the user while the coins are hidden.
+                <group position={[0, 1.5, 0.4]} scale={0.85}>
                     <TransactionPanel
+                        key={selectedToken.chainKey}
                         token={selectedToken}
-                        onClose={() => setSelectedToken(null)}
-                        onSend={async () => false}
-                        onSwap={swap}
+                        onClose={() => setSelectedChain(null)}
                     />
                 </group>
             )}
