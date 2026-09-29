@@ -41,11 +41,15 @@
 ### Quick Start
 ```bash
 # Install dependencies (including non-EVM libraries)
-npm install
+pnpm install
 
-# Start the spatial development server
-npm run dev
+# Start the development server (http://localhost:3000)
+pnpm dev
 ```
+
+`dev` and `build` first copy the MediaPipe hand-tracking model and runtime from
+`node_modules` into `public/vendor/` (see `scripts/copy-vendor-assets.mjs`), so hand
+tracking is served by the app itself — no CDN at runtime, and it works offline.
 
 ### Desktop XR Emulation
 For local desktop testing without a headset, enable Meta IWER through a local-only environment file:
@@ -62,11 +66,21 @@ NEXT_PUBLIC_FORCE_XR_EMULATION=true
 
 Do not enable either flag for production, Electron release builds, or headset validation builds.
 
-### Electron Distribution
+### Desktop App (Electron)
 ```bash
-# Build for desktop release
-npm run electron:build
+# Develop: Next dev server + Electron window
+pnpm electron:dev
+
+# Preview the production export in Electron without packaging
+pnpm electron:preview
+
+# Build installers (Windows portable, macOS dmg, Linux AppImage) into dist/
+pnpm electron:build
 ```
+
+The desktop app serves the static export from a private `app://bolt` origin (so assets,
+WebCrypto and camera access work), runs sandboxed with context isolation, opens external
+links in your default browser, and only grants camera and clipboard permissions.
 
 ## 📜 Security & Distribution
 - **Audit Status**: Experimental. Use for spatial development and demonstration.
