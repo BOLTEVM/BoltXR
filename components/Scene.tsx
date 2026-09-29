@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { Environment, Lightformer, Grid, OrbitControls, Stars } from '@react-three/drei';
-import { useWallet, MIN_NEW_PIN_LENGTH, type Token } from '@/hooks/useWallet';
+import { useWallet, MIN_NEW_PIN_LENGTH } from '@/hooks/useWallet';
 import { errorMessage } from '@/lib/format';
 import Token3D from './Token3D';
 import Dashboard from './Dashboard';
 import TransactionPanel from './TransactionPanel';
 import SwapScale from './SwapScale';
+import SwapPanel from './SwapPanel';
 import SecurityPinPad from './SecurityPinPad';
 import TokenRain from './TokenRain';
 import EnvironmentSelector, { EnvType } from './EnvironmentSelector';
@@ -25,11 +26,12 @@ const ENV_TINT: Record<EnvType, string> = {
 };
 
 export default function Scene() {
-    const { tokens, account, isLocked, isVaultSetup, unlock, setup, swap, lock, lockoutUntil } = useWallet();
+    const { tokens, account, isLocked, isVaultSetup, unlock, setup, lock, lockoutUntil } = useWallet();
     const [selectedChain, setSelectedChain] = useState<string | null>(null);
     const selectedToken = tokens.find(t => t.chainKey === selectedChain) || null;
-    const [inputTokenForSwap, setInputTokenForSwap] = useState<Token | null>(null);
-    const [targetTokenForSwap, setTargetTokenForSwap] = useState<Token | null>(null);
+    // Swap panel: null = closed, otherwise the preselected source chain ('' for none).
+    const [swapFrom, setSwapFrom] = useState<string | null>(null);
+    const swapOpen = swapFrom !== null;
     
     // Environment State
     const [env, setEnv] = useState<EnvType>('space');
@@ -105,32 +107,6 @@ export default function Scene() {
         }
     };
 
-    const handleDrop = (symbol: string, pos: [number, number, number]) => {
-        const panX = -0.9;
-        const panY = 0.9;
-        const panZ = -1.5;
-        const dist = Math.sqrt(Math.pow(pos[0] - panX, 2) + Math.pow(pos[1] - panY, 2) + Math.pow(pos[2] - panZ, 2));
-
-        if (dist < 0.5) {
-            const token = tokens.find(t => t.symbol === symbol);
-            setInputTokenForSwap(token || null);
-            setTargetTokenForSwap(null);
-        } else if (inputTokenForSwap?.symbol === symbol) {
-            setInputTokenForSwap(null);
-            setTargetTokenForSwap(null);
-        }
-    };
-
-    const handleConfirmSwap = async () => {
-        if (inputTokenForSwap && targetTokenForSwap) {
-            const success = await swap(inputTokenForSwap.symbol, targetTokenForSwap.symbol, "1");
-            if (success) {
-                setInputTokenForSwap(null);
-                setTargetTokenForSwap(null);
-            }
-        }
-    };
-
     const radius = 2.5;
 
     return (
@@ -159,11 +135,11 @@ export default function Scene() {
 
             {/* Main Dashboard */}
             <group position={[0, 2.4, -3]}>
-                <Dashboard account={account} isLocked={isLocked} isVaultSetup={isVaultSetup} onConnect={handleConnect} onLock={() => { lock(); setSelectedChain(null); setShowQR(false); setShowClipboard(false); }} onShowQR={() => setShowQR(!showQR)} onShowContracts={() => setShowClipboard(!showClipboard)} />
+                <Dashboard account={account} isLocked={isLocked} isVaultSetup={isVaultSetup} onConnect={handleConnect} onLock={() => { lock(); setSelectedChain(null); setSwapFrom(null); setShowQR(false); setShowClipboard(false); }} onShowQR={() => setShowQR(!showQR)} onShowContracts={() => setShowClipboard(!showClipboard)} />
             </group>
 
             {/* Environment Selector */}
-            {!showPinPad && !showSecureInfo && !selectedToken && (
+            {!showPinPad && !showSecureInfo && !selectedToken && !swapOpen && (
                 <group position={[0, 0.5, -2.5]}>
                     <EnvironmentSelector current={env} onSelect={setEnv} />
                 </group>
@@ -197,26 +173,22 @@ export default function Scene() {
             )}
 
             {/* Swap Scale */}
-            {!showPinPad && !showSecureInfo && !selectedToken && (
+            {!showPinPad && !showSecureInfo && !selectedToken && !swapOpen && (
                 <group position={[0, 1.2, -1.5]}>
-                    <SwapScale 
-                        inputToken={inputTokenForSwap}
-                        targetToken={targetTokenForSwap}
-                        onSelectTarget={setTargetTokenForSwap}
-                        onConfirm={handleConfirmSwap}
-                        availableTokens={tokens}
+                    <SwapScale
+                        disabled={isLocked}
+                        onActivate={() => (isLocked ? handleConnect() : setSwapFrom(''))}
                     />
                 </group>
             )}
 
             {/* Tokens Layout */}
-            {!showPinPad && !showSecureInfo && !selectedToken && (
+            {!showPinPad && !showSecureInfo && !selectedToken && !swapOpen && (
                 <group position={[0, 1.2, 0]}>
                     {tokens.map((token, i) => {
                         const angle = (i - (tokens.length - 1) / 2) * 0.4;
                         const x = Math.sin(angle) * radius;
                         const z = -Math.cos(angle) * radius;
-                        if (inputTokenForSwap?.symbol === token.symbol) return null;
 
                         return (
                             <Token3D
@@ -226,10 +198,8 @@ export default function Scene() {
                                 network={token.network}
                                 balance={token.balance}
                                 status={token.status}
-                                logo={token.logo}
                                 position={[x, 0, z]}
                                 onClick={() => setSelectedChain(token.chainKey)}
-                                onDrop={handleDrop}
                             />
                         );
                     })}
@@ -237,14 +207,22 @@ export default function Scene() {
             )}
 
             {/* Transaction Panel */}
-            {selectedToken && !showPinPad && !showSecureInfo && (
+            {selectedToken && !showPinPad && !showSecureInfo && !swapOpen && (
                 // Focused view: centered in front of the user while the coins are hidden.
                 <group position={[0, 1.5, 0.4]} scale={0.85}>
                     <TransactionPanel
                         key={selectedToken.chainKey}
                         token={selectedToken}
                         onClose={() => setSelectedChain(null)}
+                        onStartSwap={(token) => { setSelectedChain(null); setSwapFrom(token.chainKey); }}
                     />
+                </group>
+            )}
+
+            {/* Swap Panel (focused view) */}
+            {swapOpen && !showPinPad && !showSecureInfo && !isLocked && (
+                <group position={[0, 1.5, 0.4]} scale={0.85}>
+                    <SwapPanel initialFrom={swapFrom || null} onClose={() => setSwapFrom(null)} />
                 </group>
             )}
 

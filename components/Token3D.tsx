@@ -1,22 +1,23 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Text, Float, useTexture } from '@react-three/drei';
+import { Text, Float } from '@react-three/drei';
 import { Mesh, Group, Vector3 } from 'three';
-import SafeBoundary from './xr/SafeBoundary';
 
-/** Logo faces on both sides of the coin. Loaded in isolation: remote logos may fail (CORS/offline). */
-function CoinFaces({ logo }: { logo: string }) {
-    const texture = useTexture(logo);
+/**
+ * Ticker on both faces of the coin. Rendered locally rather than from remote
+ * logo images: those need CORS for WebGL, fail offline, and leak which chains
+ * the user holds to third-party hosts.
+ */
+function CoinFaces({ symbol }: { symbol: string }) {
+    const size = symbol.length > 3 ? 0.09 : 0.12;
     return (
         <>
-            <mesh position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[0.22, 32]} />
-                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-            </mesh>
-            <mesh position={[0, -0.041, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[0.22, 32]} />
-                <meshStandardMaterial map={texture} transparent alphaTest={0.5} />
-            </mesh>
+            <Text position={[0, 0.042, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={size} color="white" anchorX="center" anchorY="middle">
+                {symbol}
+            </Text>
+            <Text position={[0, -0.042, 0]} rotation={[Math.PI / 2, 0, Math.PI]} fontSize={size} color="white" anchorX="center" anchorY="middle">
+                {symbol}
+            </Text>
         </>
     );
 }
@@ -29,47 +30,29 @@ interface Token3DProps {
     position: [number, number, number];
     onClick: () => void;
     status: 'loading' | 'success' | 'error';
-    logo: string;
-    onGrab?: (symbol: string) => void;
-    onDrop?: (symbol: string, position: [number, number, number]) => void;
 }
 
-export default function Token3D({ symbol, color, balance, network, position, onClick, status, logo, onGrab, onDrop }: Token3DProps) {
+export default function Token3D({ symbol, color, balance, network, position, onClick, status }: Token3DProps) {
     const meshRef = useRef<Mesh>(null);
     const groupRef = useRef<Group>(null);
     const [hovered, setHovered] = useState(false);
-    const [isGrabbed, setIsGrabbed] = useState(false);
+
+    const home = useMemo(() => new Vector3(...position), [position]);
 
     useFrame((state, delta) => {
-        if (meshRef.current) {
-            // Rotation animation (only if not grabbed)
-            if (!isGrabbed) {
-                meshRef.current.rotation.y += delta * 0.4;
-            }
-
-            if (hovered || status === 'error') {
-                meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 2) * (status === 'error' ? 0.4 : 0.2);
-            } else if (!isGrabbed) {
-                meshRef.current.rotation.x = 0;
-            }
+        const mesh = meshRef.current;
+        if (mesh) {
+            mesh.rotation.y += delta * 0.4;
+            mesh.rotation.x = hovered || status === 'error'
+                ? Math.sin(state.clock.elapsedTime * 2) * (status === 'error' ? 0.4 : 0.2)
+                : 0;
         }
-
-        // If grabbed, follow the pointer/hand
-        if (isGrabbed && groupRef.current) {
-            // In a real XR environment, we would use the controller/hand position
-            // For now, we simulate with pointer position if available
-            const { x, y } = state.pointer;
-            groupRef.current.position.lerp(new Vector3(x * 5, y * 3 + 1.2, -2), 0.1);
-        } else if (groupRef.current && !isGrabbed) {
-            // Smoothly return to original position
-            groupRef.current.position.lerp(new Vector3(...position), 0.1);
-        }
+        // Ease back into its slot (e.g. after the layout changes).
+        groupRef.current?.position.lerp(home, 0.1);
     });
 
-
-
     return (
-        <Float floatIntensity={isGrabbed ? 0 : 1} speed={2} rotationIntensity={isGrabbed ? 0 : 0.5}>
+        <Float floatIntensity={1} speed={2} rotationIntensity={0.5}>
             <group 
                 ref={groupRef} 
                 position={position}
@@ -102,7 +85,7 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                 {/* 3D Coin Body */}
                 <mesh
                     ref={meshRef}
-                    scale={hovered || isGrabbed ? 1.2 : 1}
+                    scale={hovered ? 1.2 : 1}
                     rotation={[Math.PI / 2, 0, 0]}
                 >
                     <cylinderGeometry args={[0.3, 0.3, 0.08, 32]} />
@@ -110,12 +93,12 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                         color={status === 'error' ? '#ef4444' : color}
                         metalness={0.9}
                         roughness={0.1}
-                        emissive={status === 'error' ? '#ef4444' : (isGrabbed ? "#fff" : color)}
-                        emissiveIntensity={hovered || status === 'error' || isGrabbed ? 0.8 : 0.2}
+                        emissive={status === 'error' ? '#ef4444' : color}
+                        emissiveIntensity={hovered || status === 'error' ? 0.8 : 0.2}
                     />
 
                     {/* Logo faces (both sides) */}
-                    <SafeBoundary><CoinFaces logo={logo} /></SafeBoundary>
+                    <CoinFaces symbol={symbol} />
 
                 </mesh>
 
@@ -148,7 +131,7 @@ export default function Token3D({ symbol, color, balance, network, position, onC
                 </group>
 
                 {/* Balance Text */}
-                {(hovered || isGrabbed) && (
+                {(hovered) && (
                     <group position={[0, 0.7, 0]}>
                         <mesh>
                             <planeGeometry args={[0.8, 0.25]} />
