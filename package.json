@@ -4,12 +4,13 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run vendor && next dev",
+    "build": "npm run vendor && next build",
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "concurrently \"next dev\" \"electron .\"",
-    "electron:build": "next build && electron-builder"
+    "electron:build": "next build && electron-builder",
+    "vendor": "node scripts/copy-vendor-assets.mjs"
   },
   "build": {
     "appId": "com.bolt.xr.wallet",

@@ -19,8 +19,9 @@ export interface UseMediaPipeOptions {
 
 type HandsConstructor = new (config: { locateFile: (file: string) => string }) => HandsType;
 
-// Model assets are served from the package's CDN mirror.
-const locateFile = (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+// Model assets are copied from the npm package into public/vendor at dev/build time
+// (scripts/copy-vendor-assets.mjs), so no third-party code runs in the wallet page.
+const locateFile = (file: string) => `/vendor/mediapipe/hands/${file}`;
 
 /**
  * Runs MediaPipe Hands against an existing <video> element (e.g. react-webcam),
