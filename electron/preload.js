@@ -1,6 +1,7 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge } = require('electron');
 
+// Runs in a sandboxed preload: expose only minimal, read-only information.
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Add any IPC communication here if needed in the future
   platform: process.platform,
+  isDesktop: true,
 });

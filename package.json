@@ -8,9 +8,10 @@
     "build": "npm run vendor && next build",
     "start": "next start",
     "lint": "eslint",
-    "electron:dev": "concurrently \"next dev\" \"electron .\"",
-    "electron:build": "next build && electron-builder",
-    "vendor": "node scripts/copy-vendor-assets.mjs"
+    "electron:dev": "concurrently -k \"npm run dev\" \"electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "vendor": "node scripts/copy-vendor-assets.mjs",
+    "electron:preview": "npm run build && electron . --serve-static"
   },
   "build": {
     "appId": "com.bolt.xr.wallet",
@@ -20,7 +21,9 @@
     },
     "files": [
       "electron/**/*",
-      "out/**/*"
+      "out/**/*",
+      "package.json",
+      "!**/node_modules/**/*"
     ],
     "win": {
       "target": "portable",
@@ -30,7 +33,18 @@
       "provider": "github",
       "owner": "BOLTEVM",
       "repo": "BoltXR"
-    }
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/0logov3.png",
+      "category": "Finance"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/0logov3.png",
+      "category": "public.app-category.finance"
+    },
+    "npmRebuild": false
   },
   "dependencies": {
     "@lifi/sdk": "^3.1.0",
@@ -87,5 +101,7 @@
     "iwer": "^2.2.1",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "author": "BOLT XR LABS",
+  "description": "Multi-chain spatial wallet for WebXR and webcam hand tracking."
 }
