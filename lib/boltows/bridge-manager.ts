@@ -1,6 +1,6 @@
-import { createConfig, getQuote, ExtendedChain, LiFiStep } from '@lifi/sdk';
+import { createConfig, getQuote, LiFiStep } from '@lifi/sdk';
 import { ThorchainQuery } from '@xchainjs/xchain-thorchain-query';
-import { assetFromString, baseAmount, Asset, CryptoAmount } from '@xchainjs/xchain-util';
+import { assetFromString, baseAmount, CryptoAmount } from '@xchainjs/xchain-util';
 
 if (typeof window !== 'undefined') {
   createConfig({
@@ -9,6 +9,22 @@ if (typeof window !== 'undefined') {
 }
 
 const thorchainQuery = new ThorchainQuery();
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The subset of a Thorchain swap estimate this module reads. */
+interface ThorchainSwapQuote {
+  inboundAddress?: string;
+  memo?: string;
+  router?: string;
+  expectedAmountOut: { baseAmount: { amount(): { toString(): string } } };
+}
+
+export interface ThorchainBridgeQuote {
+  provider: 'thorchain';
+  quote: ThorchainSwapQuote;
+  transactionRequest: { to?: string; value: string; data?: string; from?: string };
+}
 
 export class BridgeManager {
   /**
@@ -31,9 +47,9 @@ export class BridgeManager {
         toToken,
         fromAmount: amount,
       });
-    } catch (e: any) {
+    } catch (e) {
       console.error("LI.FI Quote Error:", e);
-      throw new Error(`LI.FI Error: ${e.message}`);
+      throw new Error(`LI.FI Error: ${errorText(e)}`);
     }
   }
 
@@ -45,14 +61,15 @@ export class BridgeManager {
     toAssetStr: string,
     amountStr: string,
     destinationAddress: string
-  ): Promise<any> {
+  ): Promise<ThorchainBridgeQuote> {
     try {
       const fromAsset = assetFromString(fromAssetStr);
       const toAsset = assetFromString(toAssetStr);
       
       if (!fromAsset || !toAsset) throw new Error("Invalid asset format for Thorchain");
 
-      const quote = await (thorchainQuery as any).quoteSwap({
+      const query = thorchainQuery as unknown as { quoteSwap(params: unknown): Promise<ThorchainSwapQuote> };
+      const quote = await query.quoteSwap({
         fromAsset,
         destinationAsset: toAsset,
         amount: new CryptoAmount(baseAmount(amountStr), fromAsset),
@@ -70,9 +87,9 @@ export class BridgeManager {
           from: quote.router || undefined
         }
       };
-    } catch (e: any) {
+    } catch (e) {
       console.error("Thorchain Quote Error:", e);
-      throw new Error(`Thorchain Error: ${e.message}`);
+      throw new Error(`Thorchain Error: ${errorText(e)}`);
     }
   }
 

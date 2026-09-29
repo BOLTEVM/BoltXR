@@ -1,3 +1,16 @@
+import { ethers } from 'ethers';
+
+/** Minimal EIP-1193 provider (e.g. window.ethereum). */
+export interface Eip1193Provider {
+    request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+}
+
+export interface HandtrackingTxReceipt {
+    transactionHash: string;
+    blockNumber: number;
+    status: 'success' | 'reverted';
+}
+
 export interface HandtrackingTxRequest {
     to: string;
     from?: string;
@@ -6,7 +19,7 @@ export interface HandtrackingTxRequest {
     gasLimit?: bigint | string;
     chainId?: number;
     rpcUrl?: string;
-    provider?: any;
+    provider?: Eip1193Provider;
     confirmations?: number;
     timeoutMs?: number;
     gestureType?: 'PINCH' | 'GRAB' | 'SWIPE' | 'POINT';
@@ -15,10 +28,20 @@ export interface HandtrackingTxRequest {
 export interface HandtrackingTxResult {
     success: boolean;
     txHash?: string;
-    receipt?: any;
-    violations?: any[];
+    receipt?: HandtrackingTxReceipt;
+    violations?: unknown[];
     error?: string;
 }
+
+/** An external pipeline (e.g. The Guards) that can take over execution. */
+export interface HandtrackingPipelineDelegate {
+    executeAndAwaitTransaction(req: HandtrackingTxRequest): Promise<HandtrackingTxResult>;
+}
+
+const errorText = (e: unknown, fallback: string) =>
+    (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string')
+        ? (e as { message: string }).message
+        : fallback;
 
 /**
  * Handtracking Wallet Interaction Pipeline
@@ -26,32 +49,37 @@ export interface HandtrackingTxResult {
  * Operates 100% standalone if 'theguards' package is not installed.
  */
 export class HandtrackingWalletPipeline {
+    private static delegate: HandtrackingPipelineDelegate | null = null;
+
+    /**
+     * Register an external pipeline (e.g. The Guards) to handle execution.
+     * Replaces a runtime require('../../theguards') that bundlers cannot resolve.
+     */
+    public static registerDelegate(delegate: HandtrackingPipelineDelegate | null) {
+        this.delegate = delegate;
+    }
+
     public static async executeAndAwaitTransaction(
         req: HandtrackingTxRequest
     ): Promise<HandtrackingTxResult> {
         console.log(`[HandtrackingWalletPipeline] Executing transaction via gesture [${req.gestureType || 'DIRECT'}] to ${req.to}...`);
 
-        // Try delegating to The Guards if present
-        try {
-            const guards = require('../../theguards');
-            if (guards && guards.TheGuardsWalletPipeline) {
-                return guards.TheGuardsWalletPipeline.executeAndAwaitTransaction(req);
-            }
-        } catch {
-            // Standalone mode: theguards not installed
+        if (this.delegate) {
+            return this.delegate.executeAndAwaitTransaction(req);
         }
 
         return this.standaloneExecuteAndAwait(req);
     }
 
     private static async standaloneExecuteAndAwait(req: HandtrackingTxRequest): Promise<HandtrackingTxResult> {
-        if (!req.to || !req.to.startsWith('0x') || req.to.length !== 42) {
+        if (!req.to || !ethers.isAddress(req.to)) {
             return { success: false, error: `Invalid recipient address: "${req.to}"` };
         }
 
         const rpcUrl = req.rpcUrl || 'http://127.0.0.1:8545';
         const timeoutMs = req.timeoutMs || 60_000;
-        const provider = req.provider || (typeof window !== 'undefined' ? (window as any).ethereum : undefined);
+        const provider = req.provider
+            || (typeof window !== 'undefined' ? (window as unknown as { ethereum?: Eip1193Provider }).ethereum : undefined);
 
         if (provider && typeof provider.request === 'function') {
             if (req.chainId) {
@@ -61,11 +89,11 @@ export class HandtrackingWalletPipeline {
             try {
                 let fromAddress = req.from;
                 if (!fromAddress) {
-                    const accounts = await provider.request({ method: 'eth_accounts' });
+                    const accounts = await provider.request({ method: 'eth_accounts' }) as string[] | undefined;
                     fromAddress = accounts && accounts.length > 0 ? accounts[0] : undefined;
                 }
 
-                const txParams: any = {
+                const txParams: Record<string, string | undefined> = {
                     to: req.to,
                     from: fromAddress,
                     data: req.data || '0x',
@@ -73,31 +101,34 @@ export class HandtrackingWalletPipeline {
                 };
                 if (req.gasLimit) txParams.gas = '0x' + BigInt(req.gasLimit).toString(16);
 
-                const txHash = await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
+                const txHash = await provider.request({ method: 'eth_sendTransaction', params: [txParams] }) as string;
                 return this.waitForReceipt(txHash, rpcUrl, timeoutMs);
-            } catch (err: any) {
-                return { success: false, error: err.message || 'Transaction submission failed.' };
+            } catch (err) {
+                return { success: false, error: errorText(err, 'Transaction submission failed.') };
             }
         }
 
-        return this.waitForReceipt('0x0000000000000000000000000000000000000000000000000000000000000000', rpcUrl, 500);
+        // Previously this polled a local node for the zero hash and reported a
+        // misleading timeout; say what is actually wrong.
+        return { success: false, error: 'No wallet provider available to submit the transaction.' };
     }
 
-    public static async ensureChain(provider: any, chainId: number, rpcUrl: string): Promise<{ success: boolean; error?: string }> {
+    public static async ensureChain(provider: Eip1193Provider, chainId: number, rpcUrl: string): Promise<{ success: boolean; error?: string }> {
         const hexChainId = '0x' + chainId.toString(16);
         try {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexChainId }] });
             return { success: true };
-        } catch (switchError: any) {
-            if (switchError.code === 4902 || switchError.message?.includes('Unrecognized chain')) {
+        } catch (switchError) {
+            const code = (switchError as { code?: number })?.code;
+            if (code === 4902 || errorText(switchError, '').includes('Unrecognized chain')) {
                 try {
                     await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: hexChainId, chainName: `Chain ${chainId}`, rpcUrls: [rpcUrl] }] });
                     return { success: true };
-                } catch (addError: any) {
-                    return { success: false, error: addError.message };
+                } catch (addError) {
+                    return { success: false, error: errorText(addError, 'Could not add chain') };
                 }
             }
-            return { success: false, error: switchError.message };
+            return { success: false, error: errorText(switchError, 'Could not switch chain') };
         }
     }
 
@@ -126,7 +157,7 @@ export class HandtrackingWalletPipeline {
                         };
                     }
                 }
-            } catch {}
+            } catch { /* RPC not reachable yet — keep polling */ }
             await new Promise(r => setTimeout(r, 1000));
         }
         return { success: false, txHash, error: `Receipt confirmation timed out after ${timeoutMs / 1000}s.` };

@@ -240,7 +240,6 @@ export default function Scene() {
                 <group position={[-1.8, 1.5, -1.5]} rotation={[0, 0.3, 0]}>
                     <ContractClipboard3D
                         chainId="ethereum"
-                        walletId={account}
                         onClose={() => setShowClipboard(false)}
                     />
                 </group>
