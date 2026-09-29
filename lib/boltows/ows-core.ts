@@ -179,8 +179,11 @@ const PRICE_FEED_IDS: Record<string, string> = {
   "tron": "0x386d389658f8446b3e15b57d0eb5f7f9011b93fdf9602a99d40b798e4d293223"
 };
 
-// NOTE: Tron intentionally keeps the EVM (coin type 60) path so existing
-// vaults continue to resolve to the same Tron addresses.
+// BIP44 account paths (index appended). Tron uses SLIP-44 coin type 195 like
+// TronLink, Trust Wallet and Ledger, so a phrase restored in any of them shows
+// the same T... address. Builds before this change derived Tron from the EVM
+// path (coin type 60); funds sent there are recoverable by importing the
+// phrase into a wallet that supports custom Tron paths.
 const DERIVATION_PATHS: Record<string, string> = {
   "ethereum": "m/44'/60'/0'/0/",
   "bsc": "m/44'/60'/0'/0/",
@@ -190,6 +193,7 @@ const DERIVATION_PATHS: Record<string, string> = {
   "monad": "m/44'/60'/0'/0/",
   "bitcoin": "m/84'/0'/0'/0/",
   "sui": "m/44'/784'/0'/0'/",
+  "tron": "m/44'/195'/0'/0/",
   "xrpl_evm": "m/44'/60'/0'/0/",
   "tron_evm": "m/44'/60'/0'/0/",
   "coredao": "m/44'/60'/0'/0/"
@@ -1134,7 +1138,8 @@ export const deriveAddress = (mnemonic: string, index: number, chainId: string =
     // 3. Tron (Mainnet)
     if (chain?.kind === 'tron') {
       const wallet = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, fullPath, englishWordlist);
-      // Tron uses the same key as EVM but prepends 0x41 and applies Base58Check
+      // Same secp256k1/keccak address as EVM (on the Tron path), with the 0x41
+      // mainnet prefix and a Base58Check encoding.
       const ethAddr = wallet.address.replace('0x', '41');
       const hash1 = ethers.sha256(ethers.getBytes('0x' + ethAddr));
       const hash2 = ethers.sha256(ethers.getBytes(hash1));
