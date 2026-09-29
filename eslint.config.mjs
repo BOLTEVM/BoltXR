@@ -12,7 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Electron-builder output and third-party runtime assets copied from node_modules
+    "dist/**",
+    "public/vendor/**",
   ]),
+  {
+    // Electron's main and preload scripts run as CommonJS in Node.
+    files: ["electron/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

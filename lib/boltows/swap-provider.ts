@@ -164,6 +164,94 @@ export class ApprovalRequiredError extends SwapError {
   }
 }
 
+// ── LI.FI response shapes (only the fields we read) ─────────────
+
+interface LifiToken {
+  address?: string;
+  symbol?: string;
+  decimals?: number;
+  chainId?: number;
+  name?: string;
+  logoURI?: string;
+  priceUSD?: string;
+}
+
+interface LifiCost {
+  name?: string;
+  description?: string;
+  percentage?: string;
+  type?: string;
+  estimate?: string;
+  limit?: string;
+  amount?: string;
+  amountUSD?: string;
+  token?: LifiToken;
+}
+
+interface LifiTransactionRequest {
+  to?: string;
+  data?: string;
+  value?: string;
+  gasLimit?: string;
+  gas?: string;
+  gasPrice?: string;
+  chainId?: number;
+}
+
+interface LifiStep {
+  id?: string;
+  type?: RouteStep['type'];
+  tool?: string;
+  toolDetails?: { name?: string; logoURI?: string };
+  action?: {
+    fromChainId?: number;
+    toChainId?: number;
+    fromToken?: LifiToken;
+    toToken?: LifiToken;
+    fromAmount?: string;
+    slippage?: number;
+  };
+  estimate?: {
+    fromAmount?: string;
+    toAmount?: string;
+    toAmountMin?: string;
+    approvalAddress?: string;
+    feeCosts?: LifiCost[];
+    gasCosts?: LifiCost[];
+    executionDuration?: number;
+  };
+  transactionRequest?: LifiTransactionRequest;
+  includedSteps?: LifiStep[];
+}
+
+const toTokenInfo = (t: LifiToken | undefined, fallback?: TokenInfo): TokenInfo => ({
+  address: t?.address || fallback?.address || '',
+  symbol: t?.symbol || fallback?.symbol || '',
+  decimals: t?.decimals ?? fallback?.decimals ?? 18,
+  chainId: t?.chainId || fallback?.chainId || 0,
+  name: t?.name || fallback?.name || '',
+  logoURI: t?.logoURI,
+  priceUSD: t?.priceUSD,
+});
+
+const toFeeCost = (f: LifiCost): FeeCost => ({
+  name: f.name || '',
+  description: f.description || '',
+  percentage: f.percentage || '0',
+  amount: f.amount || '0',
+  amountUSD: f.amountUSD || '0',
+  token: toTokenInfo(f.token),
+});
+
+const toGasCost = (g: LifiCost): GasCost => ({
+  type: g.type || '',
+  estimate: g.estimate || '0',
+  limit: g.limit || '0',
+  amount: g.amount || '0',
+  amountUSD: g.amountUSD || '0',
+  token: toTokenInfo(g.token),
+});
+
 // ── Native Token Address Constant ────────────────────────────────
 const NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
@@ -357,17 +445,9 @@ export class SwapProvider {
 
       if (!response.ok) return [];
       const data = await response.json();
-      const tokens = data.tokens?.[chainId.toString()] || [];
-      
-      return tokens.map((t: any) => ({
-        address: t.address,
-        symbol: t.symbol,
-        decimals: t.decimals,
-        chainId: t.chainId,
-        name: t.name,
-        logoURI: t.logoURI,
-        priceUSD: t.priceUSD,
-      }));
+      const tokens: LifiToken[] = data.tokens?.[chainId.toString()] || [];
+
+      return tokens.map(t => toTokenInfo(t));
     } catch {
       return [];
     }
@@ -375,7 +455,7 @@ export class SwapProvider {
 
   // ── Internal Mapping ─────────────────────────────────────────
 
-  private mapQuoteResponse(data: any): SwapQuote {
+  private mapQuoteResponse(data: LifiStep): SwapQuote {
     const action = data.action || {};
     const estimate = data.estimate || {};
     const transactionRequest = data.transactionRequest || {};
@@ -410,42 +490,15 @@ export class SwapProvider {
     const rate = fromAmountNum > 0 ? (toAmountNum / fromAmountNum).toFixed(6) : '0';
 
     // Aggregate fee and gas costs
-    const feeCosts: FeeCost[] = (estimate.feeCosts || []).map((f: any) => ({
-      name: f.name || '',
-      description: f.description || '',
-      percentage: f.percentage || '0',
-      amount: f.amount || '0',
-      amountUSD: f.amountUSD || '0',
-      token: {
-        address: f.token?.address || '',
-        symbol: f.token?.symbol || '',
-        decimals: f.token?.decimals || 18,
-        chainId: f.token?.chainId || 0,
-        name: f.token?.name || '',
-      },
-    }));
-
-    const gasCosts: GasCost[] = (estimate.gasCosts || []).map((g: any) => ({
-      type: g.type || '',
-      estimate: g.estimate || '0',
-      limit: g.limit || '0',
-      amount: g.amount || '0',
-      amountUSD: g.amountUSD || '0',
-      token: {
-        address: g.token?.address || '',
-        symbol: g.token?.symbol || '',
-        decimals: g.token?.decimals || 18,
-        chainId: g.token?.chainId || 0,
-        name: g.token?.name || '',
-      },
-    }));
+    const feeCosts = (estimate.feeCosts || []).map(toFeeCost);
+    const gasCosts = (estimate.gasCosts || []).map(toGasCost);
 
     const estimatedGasUSD = gasCosts.reduce(
       (sum, g) => sum + parseFloat(g.amountUSD || '0'), 0
     ).toFixed(2);
 
     // Map route steps
-    const steps: RouteStep[] = (data.includedSteps || [data]).map((step: any) => ({
+    const steps: RouteStep[] = (data.includedSteps || [data]).map((step: LifiStep) => ({
       id: step.id || data.id || '',
       type: step.type || 'swap',
       tool: step.tool || data.tool || '',
@@ -456,8 +509,8 @@ export class SwapProvider {
       action: {
         fromChainId: step.action?.fromChainId || action.fromChainId || 0,
         toChainId: step.action?.toChainId || action.toChainId || 0,
-        fromToken: step.action?.fromToken || fromToken,
-        toToken: step.action?.toToken || toToken,
+        fromToken: toTokenInfo(step.action?.fromToken, fromToken),
+        toToken: toTokenInfo(step.action?.toToken, toToken),
         fromAmount: step.action?.fromAmount || fromAmount,
         slippage: step.action?.slippage || action.slippage || 0.005,
       },
@@ -466,13 +519,13 @@ export class SwapProvider {
         toAmount: step.estimate?.toAmount || toAmount,
         toAmountMin: step.estimate?.toAmountMin || toAmountMin,
         approvalAddress: step.estimate?.approvalAddress,
-        feeCosts: step.estimate?.feeCosts || [],
-        gasCosts: step.estimate?.gasCosts || [],
+        feeCosts: (step.estimate?.feeCosts || []).map(toFeeCost),
+        gasCosts: (step.estimate?.gasCosts || []).map(toGasCost),
         executionDuration: step.estimate?.executionDuration || 0,
       },
       transactionRequest: step.transactionRequest ? {
-        to: step.transactionRequest.to,
-        data: step.transactionRequest.data,
+        to: step.transactionRequest.to || '',
+        data: step.transactionRequest.data || '',
         value: step.transactionRequest.value || '0',
         gasLimit: step.transactionRequest.gasLimit || step.transactionRequest.gas || '0',
         gasPrice: step.transactionRequest.gasPrice,

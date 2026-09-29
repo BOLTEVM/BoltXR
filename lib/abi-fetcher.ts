@@ -196,19 +196,22 @@ export function parseABIMethods(abiJson: string): {
     const abi = JSON.parse(abiJson);
     if (!Array.isArray(abi)) return [];
 
-    return abi
-      .filter((entry: any) => entry.type === 'function')
-      .map((entry: any) => ({
-        name: entry.name,
+    type AbiParam = { name?: string; type?: string };
+    type AbiEntry = { type?: string; name?: string; stateMutability?: string; inputs?: AbiParam[]; outputs?: AbiParam[] };
+
+    return (abi as AbiEntry[])
+      .filter(entry => entry && entry.type === 'function' && typeof entry.name === 'string')
+      .map(entry => ({
+        name: entry.name as string,
         type: (entry.stateMutability === 'view' || entry.stateMutability === 'pure')
           ? 'read' as const
           : 'write' as const,
         stateMutability: entry.stateMutability || 'nonpayable',
-        inputs: (entry.inputs || []).map((inp: any) => ({
+        inputs: (entry.inputs || []).map(inp => ({
           name: inp.name || '',
           type: inp.type || '',
         })),
-        outputs: (entry.outputs || []).map((out: any) => ({
+        outputs: (entry.outputs || []).map(out => ({
           name: out.name || '',
           type: out.type || '',
         })),

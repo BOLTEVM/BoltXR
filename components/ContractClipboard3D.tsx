@@ -9,16 +9,16 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Text, RoundedBox, Float } from '@react-three/drei';
-import { BoltwalletCore, ContractData } from '@/lib/boltows/ows-core';
+import type { ContractData } from '@/lib/boltows/ows-core';
+import { walletCore as core } from '@/lib/boltows/core-instance';
+import { errorMessage } from '@/lib/format';
 import { parseABIMethods } from '@/lib/abi-fetcher';
 
-const core = new BoltwalletCore();
 
 type ClipboardTab = 'import' | 'browse' | 'interact';
 
 interface ContractClipboard3DProps {
   chainId: string;
-  walletId: string | null;
   onClose: () => void;
   onOpenQRScanner?: () => void;
 }
@@ -62,7 +62,7 @@ function TabBtn({ label, active, onClick, position }: {
   );
 }
 
-export default function ContractClipboard3D({ chainId, walletId, onClose, onOpenQRScanner }: ContractClipboard3DProps) {
+export default function ContractClipboard3D({ chainId, onClose, onOpenQRScanner }: ContractClipboard3DProps) {
   const [tab, setTab] = useState<ClipboardTab>('browse');
   const [contracts, setContracts] = useState<ContractData[]>([]);
   const [selected, setSelected] = useState<ContractData | null>(null);
@@ -118,7 +118,7 @@ export default function ContractClipboard3D({ chainId, walletId, onClose, onOpen
 
       setStatus('UNRECOGNIZED FORMAT');
       setTimeout(() => setStatus(''), 3000);
-    } catch (e: any) {
+    } catch {
       setStatus('CLIPBOARD ERROR');
       setTimeout(() => setStatus(''), 3000);
     }
@@ -152,8 +152,8 @@ export default function ContractClipboard3D({ chainId, walletId, onClose, onOpen
     try {
       const result = await core.callContractRead(selected.address, selected.abi, methodName, [], chainId);
       setMethodResults(prev => ({ ...prev, [methodName]: String(result) }));
-    } catch (e: any) {
-      setMethodResults(prev => ({ ...prev, [methodName]: `ERR: ${e.message.substring(0, 30)}` }));
+    } catch (e) {
+      setMethodResults(prev => ({ ...prev, [methodName]: `ERR: ${errorMessage(e).substring(0, 30)}` }));
     }
   }, [selected, chainId]);
 

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Text, RoundedBox, Float } from '@react-three/drei';
 
 export type EnvType = 'space' | 'sunset' | 'forest' | 'city' | 'rain';
