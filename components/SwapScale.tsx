@@ -1,57 +1,50 @@
 'use client';
 
-import { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Text, Float, RoundedBox } from '@react-three/drei';
+import { useRef, useState } from 'react';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
 import { Group, MathUtils } from 'three';
-import type { Token } from '@/hooks/useWallet';
+import { XR_THEME } from './xr/Button3D';
 
 interface SwapScaleProps {
-  inputToken: Token | null;
-  targetToken: Token | null;
-  onSelectTarget: (token: Token) => void;
-  onConfirm: () => void;
-  availableTokens: Token[];
+  /** Opens the swap panel. */
+  onActivate: () => void;
+  disabled?: boolean;
 }
 
-export default function SwapScale({ 
-  inputToken, 
-  targetToken, 
-  onSelectTarget, 
-  onConfirm,
-  availableTokens 
-}: SwapScaleProps) {
+/** The swap "scale": a tappable centerpiece that opens the cross-chain swap flow. */
+export default function SwapScale({ onActivate, disabled = false }: SwapScaleProps) {
   const armRef = useRef<Group>(null);
   const leftPanRef = useRef<Group>(null);
   const rightPanRef = useRef<Group>(null);
+  const [hovered, setHovered] = useState(false);
 
-  // Animation state for the scale tipping
-  const currentRotation = useRef(0);
-
-  // Calculate route type — all routing via unified LI.FI SwapProvider
-  const routeType = useMemo(() => {
-    if (!inputToken || !targetToken) return null;
-    if (inputToken.chainId === targetToken.chainId) return "SWAP (LI.FI)";
-    return "BRIDGE (LI.FI CROSS-CHAIN)";
-  }, [inputToken, targetToken]);
-
-  useFrame((state, delta) => {
-    // Determine target rotation based on whether we have an input token
-    const newTarget = inputToken ? (targetToken ? 0 : -0.2) : 0;
-
-    // Smoothly animate the arm rotation
-    currentRotation.current = MathUtils.lerp(currentRotation.current, newTarget, delta * 2);
+  useFrame((state) => {
+    // Gentle idle sway; tips further while hovered to invite interaction.
+    const t = state.clock.elapsedTime;
+    const target = Math.sin(t * 0.8) * (hovered ? 0.18 : 0.06);
     if (armRef.current) {
-      armRef.current.rotation.z = currentRotation.current;
+      armRef.current.rotation.z = MathUtils.lerp(armRef.current.rotation.z, target, 0.08);
+      const z = armRef.current.rotation.z;
+      if (leftPanRef.current) leftPanRef.current.rotation.z = -z;
+      if (rightPanRef.current) rightPanRef.current.rotation.z = -z;
     }
-
-    // Keep pans vertical
-    if (leftPanRef.current) leftPanRef.current.rotation.z = -currentRotation.current;
-    if (rightPanRef.current) rightPanRef.current.rotation.z = -currentRotation.current;
   });
 
+  const setCursor = (value: string) => { document.body.style.cursor = value; };
+
   return (
-    <group>
+    <group
+      onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); if (!disabled) onActivate(); }}
+      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); if (!disabled) setCursor('pointer'); }}
+      onPointerOut={() => { setHovered(false); setCursor('auto'); }}
+    >
+      {/* Invisible hit area so the whole scale is easy to tap */}
+      <mesh position={[0, -0.2, 0]} visible={false}>
+        <boxGeometry args={[2.1, 1.3, 0.4]} />
+        <meshBasicMaterial />
+      </mesh>
+
       {/* Base */}
       <mesh position={[0, -0.8, 0]}>
         <cylinderGeometry args={[0.4, 0.5, 0.1, 32]} />
@@ -68,102 +61,29 @@ export default function SwapScale({
       <group ref={armRef} position={[0, 0.15, 0]}>
         <mesh>
           <boxGeometry args={[2, 0.05, 0.05]} />
-          <meshStandardMaterial color="#475569" metalness={0.9} />
+          <meshStandardMaterial color={hovered && !disabled ? XR_THEME.success : '#475569'} metalness={0.9} />
         </mesh>
 
-        {/* Left Pan */}
         <group ref={leftPanRef} position={[-0.9, -0.3, 0]}>
           <mesh>
-             <cylinderGeometry args={[0.3, 0.3, 0.02, 32]} />
-             <meshStandardMaterial 
-                color={inputToken ? "#8b5cf6" : "#1e293b"} 
-                transparent 
-                opacity={0.8}
-                emissive={inputToken ? "#8b5cf6" : "#000"}
-                emissiveIntensity={0.5}
-             />
+            <cylinderGeometry args={[0.3, 0.3, 0.02, 32]} />
+            <meshStandardMaterial color="#8b5cf6" transparent opacity={0.8} emissive="#8b5cf6" emissiveIntensity={hovered ? 0.7 : 0.35} />
           </mesh>
-          <Text position={[0, -0.1, 0.03]} fontSize={0.04} color="#94a3b8">SOURCE</Text>
+          <Text position={[0, -0.1, 0.03]} fontSize={0.04} color={XR_THEME.muted}>FROM</Text>
         </group>
 
-        {/* Right Pan */}
         <group ref={rightPanRef} position={[0.9, -0.3, 0]}>
           <mesh>
-             <cylinderGeometry args={[0.3, 0.3, 0.02, 32]} />
-             <meshStandardMaterial 
-                color={targetToken ? "#3b82f6" : "#1e293b"} 
-                transparent 
-                opacity={0.8}
-                emissive={targetToken ? "#3b82f6" : "#000"}
-                emissiveIntensity={0.5}
-             />
+            <cylinderGeometry args={[0.3, 0.3, 0.02, 32]} />
+            <meshStandardMaterial color="#3b82f6" transparent opacity={0.8} emissive="#3b82f6" emissiveIntensity={hovered ? 0.7 : 0.35} />
           </mesh>
-          <Text position={[0, -0.1, 0.03]} fontSize={0.04} color="#94a3b8">DESTINATION</Text>
+          <Text position={[0, -0.1, 0.03]} fontSize={0.04} color={XR_THEME.muted}>TO</Text>
         </group>
       </group>
 
-      {/* Floating UI for Token Selection */}
-      {inputToken && !targetToken && (
-        <group position={[0, 0.8, 0]}>
-          <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
-            <RoundedBox args={[1.6, 0.8, 0.05]} radius={0.05}>
-                <meshStandardMaterial color="#0f172a" transparent opacity={0.9} metalness={0.8} />
-            </RoundedBox>
-            <Text position={[0, 0.3, 0.03]} fontSize={0.06} color="white">SELECT TARGET ASSET</Text>
-            
-            <group position={[-0.5, 0, 0.03]}>
-              {availableTokens.filter(t => t.symbol !== inputToken.symbol).slice(0, 3).map((token, i) => (
-                    <group 
-                      key={token.symbol} 
-                      position={[i * 0.5, 0, 0]}
-                      onClick={() => onSelectTarget(token)}
-                    >
-                    <mesh>
-                        <circleGeometry args={[0.15, 32]} />
-                        <meshStandardMaterial color={token.color} emissive={token.color} emissiveIntensity={0.5} />
-                    </mesh>
-                    <Text position={[0, -0.2, 0]} fontSize={0.05} color="white">{token.symbol}</Text>
-                    </group>
-              ))}
-            </group>
-          </Float>
-        </group>
-      )}
-
-      {/* Confirmation UI with Route Telemetry */}
-      {inputToken && targetToken && (
-        <group position={[0, 0.8, 0]}>
-          <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
-            <RoundedBox args={[1.5, 0.8, 0.05]} radius={0.05}>
-                <meshStandardMaterial color="#0f172a" transparent opacity={0.95} metalness={0.9} />
-            </RoundedBox>
-            
-            <Text position={[0, 0.25, 0.03]} fontSize={0.07} color="white">
-                SWAP {inputToken.symbol} TO {targetToken.symbol}
-            </Text>
- 
-            <Text position={[0, 0.1, 0.03]} fontSize={0.04} color="#10b981">
-                OPTIMAL ROUTE: {routeType}
-            </Text>
-            
-            <mesh position={[0, 0, 0.03]}>
-                <planeGeometry args={[1.2, 0.002]} />
-                <meshStandardMaterial color="#334155" />
-            </mesh>
- 
-            <group position={[0, -0.2, 0.03]} onClick={onConfirm}>
-                <RoundedBox args={[0.8, 0.2, 0.05]} radius={0.05}>
-                    <meshStandardMaterial color="#10b981" emissive="#10b981" emissiveIntensity={0.2} />
-                </RoundedBox>
-                <Text position={[0, 0, 0.03]} fontSize={0.06} color="white">EXECUTE CROSS-CHAIN SWAP</Text>
-            </group>
- 
-            <Text position={[0, -0.35, 0.03]} fontSize={0.03} color="#64748b">
-                ESTIMATED TIME: {inputToken.chainId === targetToken.chainId ? "< 30s" : "~3-5m"}
-            </Text>
-          </Float>
-        </group>
-      )}
+      <Text position={[0, 0.42, 0]} fontSize={0.055} color={hovered && !disabled ? XR_THEME.success : XR_THEME.muted} anchorX="center">
+        {disabled ? 'UNLOCK TO SWAP' : 'TAP THE SCALE TO SWAP'}
+      </Text>
 
       <pointLight position={[0, 0.5, 0]} color="#6366f1" intensity={3} distance={3} />
     </group>

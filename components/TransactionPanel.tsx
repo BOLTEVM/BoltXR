@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { Text, RoundedBox } from '@react-three/drei';
 import Button3D, { XR_THEME } from './xr/Button3D';
+import AmountKeypad from './xr/AmountKeypad';
 import { useWallet, type Token } from '@/hooks/useWallet';
 import { CHAINS, getExplorerTxUrl } from '@/lib/boltows/chains';
 import { errorMessage, formatAmount, formatUsd, truncateAddress } from '@/lib/format';
@@ -11,18 +12,13 @@ import { errorMessage, formatAmount, formatUsd, truncateAddress } from '@/lib/fo
 interface TransactionPanelProps {
     token: Token;
     onClose: () => void;
+    /** Start a swap with this token as the source (shown for swappable chains). */
+    onStartSwap?: (token: Token) => void;
 }
 
 type Step = 'overview' | 'recipient' | 'amount' | 'review' | 'sending' | 'done';
 
-const AMOUNT_KEYS = [
-    ['1', '2', '3'],
-    ['4', '5', '6'],
-    ['7', '8', '9'],
-    ['.', '0', 'DEL'],
-];
-
-export default function TransactionPanel({ token, onClose }: TransactionPanelProps) {
+export default function TransactionPanel({ token, onClose, onStartSwap }: TransactionPanelProps) {
     const wallet = useWallet();
     const { validateAddress, parseAmount, estimateFee, send } = wallet;
     const chain = CHAINS[token.chainKey];
@@ -69,18 +65,6 @@ export default function TransactionPanel({ token, onClose }: TransactionPanelPro
         } catch {
             setMessage({ text: 'CLIPBOARD BLOCKED — PRESS CTRL/CMD+V INSTEAD', error: true });
         }
-    };
-
-    const pressAmountKey = (key: string) => {
-        setMessage(null);
-        if (key === 'DEL') return setAmount(a => a.slice(0, -1));
-        if (key === '.') return setAmount(a => (a.includes('.') ? a : (a || '0') + '.'));
-        setAmount(a => {
-            if (a.length >= 18) return a;
-            const fraction = a.split('.')[1];
-            if (fraction !== undefined && fraction.length >= decimals) return a;
-            return a === '0' ? key : a + key;
-        });
     };
 
     const setMax = async () => {
@@ -163,13 +147,17 @@ export default function TransactionPanel({ token, onClose }: TransactionPanelPro
                         <Button3D
                             label={token.canSend ? `SEND ${symbol}` : `SENDING ${symbol} NOT SUPPORTED YET`}
                             onPress={() => { setMessage(null); setStep('recipient'); }}
-                            position={[0, -0.15, 0]}
+                            position={[0, -0.08, 0]}
                             width={1.1}
                             height={0.2}
                             color={XR_THEME.info}
                             disabled={!token.canSend || wallet.isLocked}
                         />
-                        <Button3D label={copied ? 'COPIED!' : 'COPY MY ADDRESS'} onPress={copyAddress} position={[0, -0.42, 0]} width={1.1} height={0.2} color={XR_THEME.brand} />
+                        {onStartSwap && token.canSwap && (
+                            <Button3D label={`SWAP ${symbol}`} onPress={() => onStartSwap(token)} position={[0, -0.33, 0]} width={1.1} height={0.2}
+                                color={XR_THEME.success} disabled={wallet.isLocked} />
+                        )}
+                        <Button3D label={copied ? 'COPIED!' : 'COPY MY ADDRESS'} onPress={copyAddress} position={[0, onStartSwap && token.canSwap ? -0.58 : -0.33, 0]} width={1.1} height={0.2} color={XR_THEME.brand} />
                         <Button3D label="CLOSE" onPress={onClose} position={[0, -0.9, 0]} width={0.6} height={0.16} />
                     </group>
                 )}
@@ -202,14 +190,14 @@ export default function TransactionPanel({ token, onClose }: TransactionPanelPro
                         <Text position={[0, 0.5, 0]} fontSize={0.04} color={XR_THEME.muted} anchorX="center">
                             {usd !== null && Number.isFinite(usd) ? `~ ${formatUsd(usd)}` : ' '}
                         </Text>
-                        <group position={[-0.1, 0.33, 0]}>
-                            {AMOUNT_KEYS.map((row, i) => row.map((key, j) => (
-                                <Button3D key={key} label={key} onPress={() => pressAmountKey(key)} position={[(j - 1) * 0.3, -i * 0.2, 0]}
-                                    width={0.27} height={0.17} fontSize={key === 'DEL' ? 0.045 : 0.07} color={XR_THEME.raised} />
-                            )))}
-                        </group>
-                        <Button3D label="MAX" onPress={setMax} position={[0.55, 0.33, 0]} width={0.22} height={0.17} fontSize={0.045} color={XR_THEME.brand} disabled={!balanceKnown} />
-                        <Button3D label="CLR" onPress={() => setAmount('')} position={[0.55, 0.13, 0]} width={0.22} height={0.17} fontSize={0.045} />
+                        <AmountKeypad
+                            value={amount}
+                            onChange={v => { setMessage(null); setAmount(v); }}
+                            decimals={decimals}
+                            onMax={setMax}
+                            maxDisabled={!balanceKnown}
+                            position={[0, 0.33, 0]}
+                        />
                         <Button3D label="BACK" onPress={() => { setStep('recipient'); setMessage(null); }} position={[-0.3, -0.9, 0]} width={0.5} height={0.16} />
                         <Button3D label="REVIEW" onPress={() => { if (validateAmount()) setStep('review'); }} position={[0.3, -0.9, 0]} width={0.5} height={0.16} color={XR_THEME.info} disabled={!amount} />
                     </group>
