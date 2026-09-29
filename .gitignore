@@ -43,3 +43,6 @@ next-env.d.ts
 
 # electron-builder
 /dist/
+
+# runtime assets copied from node_modules by scripts/copy-vendor-assets.mjs
+/public/vendor/
