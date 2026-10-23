@@ -2,6 +2,7 @@ const { app, BrowserWindow, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveStaticFile, mimeFor } = require('./static-files');
+const { attachGameBrowser } = require('./game-browser');
 
 /*
  * The Next.js static export references assets by absolute path (/_next/...),
@@ -19,6 +20,11 @@ const OUT_DIR = path.join(__dirname, '..', 'out');
 const useDevServer = !app.isPackaged && !process.argv.includes('--serve-static');
 const DEV_URL = process.env.ELECTRON_START_URL || 'http://localhost:3000';
 const APP_URL = useDevServer ? DEV_URL : `${APP_ORIGIN}/`;
+
+// Tests run against a throwaway profile, never the person's vault (unpackaged builds only).
+if (!app.isPackaged && process.env.BOLTXR_USER_DATA_DIR) {
+  app.setPath('userData', path.resolve(process.env.BOLTXR_USER_DATA_DIR));
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -71,6 +77,21 @@ function configurePermissions() {
     allowed.has(permission) && trusted(requestingOrigin));
 }
 
+/**
+ * Development/test only: point the Quai networks at another node
+ * (BOLTXR_QUAI_RPC_MAINNET / BOLTXR_QUAI_RPC_ORCHARD). Never honoured in a
+ * packaged build.
+ */
+function devPreloadArgs() {
+  if (app.isPackaged) return [];
+  const args = [];
+  for (const [key, env] of [['mainnet', 'BOLTXR_QUAI_RPC_MAINNET'], ['orchard', 'BOLTXR_QUAI_RPC_ORCHARD']]) {
+    const value = process.env[env];
+    if (value && /^https?:\/\//.test(value)) args.push(`--boltxr-quai-rpc-${key}=${value}`);
+  }
+  return args;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -88,7 +109,20 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       spellcheck: false,
+      additionalArguments: devPreloadArgs(),
     },
+  });
+
+  // The game browser lives inside this window (see game-browser.js). Its IPC is
+  // honoured only from the wallet's own top-level document.
+  attachGameBrowser({
+    win,
+    devMode: !app.isPackaged,
+    isWalletFrame: (event) =>
+      event.sender === win.webContents &&
+      !!event.senderFrame &&
+      event.senderFrame === win.webContents.mainFrame &&
+      isAppUrl(event.senderFrame.url),
   });
 
   win.once('ready-to-show', () => win.show());

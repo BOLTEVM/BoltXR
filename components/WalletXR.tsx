@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
-import { Settings } from 'lucide-react';
+import { Settings, Gamepad2 } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
 import '@/lib/xr-text';
@@ -18,7 +18,7 @@ type NavigatorWithXR = Navigator & {
     };
 };
 
-export default function WalletXR({ onExit }: { onExit: () => void }) {
+export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void; onOpenBrowser?: () => void }) {
     const { setShowSettings } = useSettings();
     const [mounted, setMounted] = useState(false);
     const [xrSupport, setXrSupport] = useState<{ vr: boolean, ar: boolean }>({ vr: false, ar: false });
@@ -116,6 +116,15 @@ export default function WalletXR({ onExit }: { onExit: () => void }) {
                         {xrSupport.vr ? "VR" : "VR N/A"}
                     </button>
                 </div>
+                {onOpenBrowser && (
+                    <button
+                        type="button"
+                        onClick={onOpenBrowser}
+                        className="btn btn-sm glass justify-center"
+                    >
+                        <Gamepad2 size={14} /> Play on BEAM
+                    </button>
+                )}
                 {!xrSupport.vr && !xrSupport.ar && (
                     <p className="text-[10px] text-red-400 text-center font-medium">WebXR not supported on this device/browser.</p>
                 )}

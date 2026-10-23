@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { Box, Shield, Hand, Globe, ArrowRight, Download, Lock, Timer, KeyRound, Github } from 'lucide-react';
+import { Box, Shield, Hand, Globe, ArrowRight, Download, Lock, Timer, KeyRound, Github, Gamepad2 } from 'lucide-react';
 import { CHAINS, SELECTED_CHAINS } from '@/lib/boltows/chains';
 import { APP_VERSION, RELEASES_URL, REPO_URL } from '@/lib/app-info';
 import type { AppStack } from '@/hooks/useSettings';
@@ -10,6 +10,7 @@ import type { AppStack } from '@/hooks/useSettings';
 interface LandingPageProps {
   onEnter: () => void;
   onEnterHandtrack: () => void;
+  onOpenBrowser: () => void;
   lastStack?: AppStack;
 }
 
@@ -18,13 +19,19 @@ const FEATURES = [
     icon: Box,
     tint: 'text-purple-400',
     title: 'Multi-Chain Vault',
-    body: 'Ethereum, BNB Chain, Polygon, Monad, Bitcoin, Sui and Tron — one recovery phrase, standard derivation paths.',
+    body: 'Ethereum, Quai, BNB Chain, Polygon, Monad, Bitcoin, Sui and Tron — one recovery phrase, standard derivation paths.',
   },
   {
     icon: Hand,
     tint: 'text-cyan-400',
     title: 'Hand-Tracking Controls',
     body: 'Pinch to tap, drag and resize floating controls with your webcam, or use native hand input in a WebXR headset.',
+  },
+  {
+    icon: Gamepad2,
+    tint: 'text-pink-400',
+    title: 'Play on BEAM',
+    body: 'A built-in game browser runs Overworld Overdrive and other BEAM games with your Quai account — the same address as Pelagus.',
   },
   {
     icon: Shield,
@@ -40,7 +47,7 @@ const SECURITY_POINTS = [
   { icon: Lock, title: 'Brute-force lockout', body: 'Repeated wrong PINs trigger an escalating cooldown that survives reloads.' },
 ];
 
-export default function LandingPage({ onEnter, onEnterHandtrack, lastStack }: LandingPageProps) {
+export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, lastStack }: LandingPageProps) {
   const launchLast = lastStack === '2D' ? onEnterHandtrack : onEnter;
 
   return (
@@ -105,6 +112,13 @@ export default function LandingPage({ onEnter, onEnterHandtrack, lastStack }: La
                   <span className="text-[10px] font-semibold tracking-wider text-slate-400 normal-case">Webcam · pinch gestures</span>
                 </span>
                 <Hand className="h-5 w-5 shrink-0 text-cyan-400" aria-hidden />
+              </button>
+              <button onClick={onOpenBrowser} className="btn btn-lg glass justify-between text-left sm:col-span-2 border-purple-500/40" data-testid="open-game-browser">
+                <span className="flex flex-col items-start gap-0.5">
+                  <span>Play on BEAM</span>
+                  <span className="text-[10px] font-semibold tracking-wider text-slate-400 normal-case">Overworld Overdrive · link your Quai wallet</span>
+                </span>
+                <Gamepad2 className="h-5 w-5 shrink-0 text-pink-400" aria-hidden />
               </button>
             </div>
             <a
@@ -176,7 +190,7 @@ export default function LandingPage({ onEnter, onEnterHandtrack, lastStack }: La
 
       {/* Feature Grid */}
       <section id="features" className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-8 pt-16 pb-12 scroll-mt-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-8">
           {FEATURES.map(({ icon: Icon, tint, title, body }) => (
             <div key={title} className="glass p-7 rounded-[28px] hover:border-white/20 transition-colors group">
               <Icon className={`h-8 w-8 ${tint} mb-5 group-hover:scale-110 transition-transform`} aria-hidden />

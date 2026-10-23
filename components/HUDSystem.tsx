@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, QrCode, FileCode2, LogOut, Lock, LockOpen, KeyRound } from 'lucide-react';
+import { Settings, QrCode, FileCode2, LogOut, Lock, LockOpen, KeyRound, Gamepad2 } from 'lucide-react';
 import type { VaultStatus } from '@/hooks/useWallet';
 
 export type HandMode = 'wallet' | 'playground';
@@ -18,6 +18,7 @@ interface HUDSystemProps {
   onOpenSettings: () => void;
   onOpenQR?: () => void;
   onOpenContracts?: () => void;
+  onOpenBrowser?: () => void;
 }
 
 const TONE_COLOR: Record<Tone, string> = {
@@ -40,6 +41,7 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
   onOpenSettings,
   onOpenQR,
   onOpenContracts,
+  onOpenBrowser,
 }) => {
   const vaultLabel = vaultStatus === 'unlocked' ? 'Unlocked' : vaultStatus === 'no-vault' ? 'Set up vault' : 'Locked';
   const VaultIcon = vaultStatus === 'unlocked' ? LockOpen : vaultStatus === 'no-vault' ? KeyRound : Lock;
@@ -88,6 +90,9 @@ const HUDSystem: React.FC<HUDSystemProps> = ({
           )}
           {onOpenContracts && (
             <button type="button" className="icon-btn glass hidden sm:inline-flex" onClick={onOpenContracts} aria-label="Contracts" title="Contracts"><FileCode2 size={16} /></button>
+          )}
+          {onOpenBrowser && (
+            <button type="button" className="icon-btn glass" onClick={onOpenBrowser} aria-label="Play on BEAM" title="Play on BEAM"><Gamepad2 size={16} /></button>
           )}
           <button type="button" className="icon-btn glass" onClick={onOpenSettings} aria-label="Settings" title="Settings"><Settings size={16} /></button>
           <button type="button" className="icon-btn glass" onClick={onExit} aria-label="Exit to home" title="Exit"><LogOut size={16} /></button>
