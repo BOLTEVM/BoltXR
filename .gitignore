@@ -46,3 +46,6 @@ next-env.d.ts
 
 # runtime assets copied from node_modules by scripts/copy-vendor-assets.mjs
 /public/vendor/
+
+# game browser e2e output
+/e2e/.out/

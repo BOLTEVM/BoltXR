@@ -13,6 +13,11 @@ import { SwapProvider, SwapQuote, SwapQuoteParams, BridgeQuoteParams, SwapError 
 import { generateAddressQR, generateContractQR, parseQRPayload, fetchFromIPFS, generateQRCanvas } from '../qr-codec';
 import { fetchABI, parseABIMethods } from '../abi-fetcher';
 import { CHAINS as CORE_CHAINS, ChainConfig, getRpcUrls, resolveChainKey } from "./chains";
+import {
+  clearQuaiSession, deriveQuaiAddress, fetchQuaiBalance, quaiDerivationPath, fetchQuaiReceiptStatus, isCyprus1QuaiAddress,
+  quaiNetworkForChainKey, sendQuaiTransaction, signQuaiMessage, signQuaiTypedData,
+  type QuaiNetwork, type QuaiTxRequest,
+} from "./quai";
 
 export type { SwapQuote, SwapQuoteParams, BridgeQuoteParams };
 export { SwapError };
@@ -189,7 +194,8 @@ const DERIVATION_PATHS: Record<string, string> = {
   "bsc": "m/44'/60'/0'/0/",
   "polygon": "m/44'/60'/0'/0/",
   "pulsechain": "m/44'/60'/0'/0/",
-  "quai": "m/44'/969'/0'/0/",
+  "quai": "m/44'/994'/0'/0/",
+  "quai_orchard": "m/44'/994'/0'/0/",
   "monad": "m/44'/60'/0'/0/",
   "bitcoin": "m/84'/0'/0'/0/",
   "sui": "m/44'/784'/0'/0'/",
@@ -306,6 +312,7 @@ let sessionLastActivity: number = 0;
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes auto-lock
 
 const clearSession = () => {
+  clearQuaiSession();
   sessionMnemonic = null;
   sessionKey = null;
   sessionSalt = null;
@@ -326,6 +333,29 @@ const isSessionExpired = () => {
 const requireUnlocked = (): string => {
   if (isSessionExpired() || !sessionMnemonic || !sessionKey) throw new VaultLockedError();
   return sessionMnemonic;
+};
+
+const requireQuaiNetwork = (chainKey: string): QuaiNetwork => {
+  const network = quaiNetworkForChainKey(chainKey);
+  if (!network) throw new Error(`Unknown Quai network: ${chainKey}`);
+  return network;
+};
+
+/** Short, actionable text for the errors quais and the Quai nodes return. */
+const quaiErrorMessage = (e: unknown): string => {
+  const err = e as { shortMessage?: string; info?: { error?: { message?: string } }; message?: string };
+  const raw = err?.info?.error?.message || err?.shortMessage || errorMessage(e);
+  if (/insufficient funds/i.test(raw)) return 'Not enough QUAI to pay for this transaction and its fee.';
+  if (/execution reverted|revert/i.test(raw)) return `The contract rejected this transaction (${raw}).`;
+  return raw;
+};
+
+const unlockedWallet = async (walletId: string): Promise<{ mnemonic: string; wallet: StoredWallet }> => {
+  const mnemonic = requireUnlocked();
+  const vault = await getVault();
+  const wallet = findWallet(vault, walletId, mnemonic);
+  if (!wallet) throw new Error('Wallet not found');
+  return { mnemonic, wallet };
 };
 
 // ── BoltwalletCore ─────────────────────────────────────────────────
@@ -395,6 +425,14 @@ export class BoltwalletCore {
    * Returns the transaction hash / digest.
    */
   async sendTransaction(walletId: string, chainKey: string, tx: TxRequest): Promise<string> {
+    if (CHAINS[chainKey]?.kind === 'quai') {
+      return this.sendQuaiTransaction(walletId, chainKey, {
+        to: tx.to,
+        value: toBigIntValue(tx.value, 'Transaction value'),
+        data: tx.data,
+        gasLimit: tx.gasLimit !== undefined ? toBigIntValue(tx.gasLimit, 'Gas limit') : undefined,
+      });
+    }
     const signed = await signTransaction(walletId, chainKey, JSON.stringify(tx, bigintReplacer));
     try {
       const hash = chainKey === 'sui'
@@ -426,6 +464,12 @@ export class BoltwalletCore {
             entry.status = receipt.status === 1 ? 'success' : 'failed';
             changed = true;
           }
+        } else if (chain?.kind === 'quai') {
+          const status = await fetchQuaiReceiptStatus(requireQuaiNetwork(entry.chainId), entry.hash);
+          if (status) {
+            entry.status = status;
+            changed = true;
+          }
         } else if (chain?.kind === 'sui') {
           const tx = await suiJsonRpc<{ effects?: { status?: { status: string } } }>(
             'sui_getTransactionBlock', [entry.hash, { showEffects: true }]
@@ -447,6 +491,57 @@ export class BoltwalletCore {
         if (target) target.status = entry.status;
       }
       await saveVault(latest);
+    }
+  }
+
+  // ── Quai accounts (used by the wallet and by sites in the game browser) ──
+
+  /** The wallet's Cyprus-1 Quai address. Throws when locked. */
+  async getQuaiAddress(walletId: string): Promise<string> {
+    const { mnemonic, wallet } = await unlockedWallet(walletId);
+    return deriveQuaiAddress(mnemonic, wallet.index);
+  }
+
+  /** EIP-191 personal_sign with the wallet's Quai key. */
+  async signQuaiMessage(walletId: string, message: string): Promise<string> {
+    const { mnemonic, wallet } = await unlockedWallet(walletId);
+    touchSession();
+    const signature = await signQuaiMessage(mnemonic, wallet.index, message);
+    logEvent('security', 'Quai message signed', 'success');
+    return signature;
+  }
+
+  /** EIP-712 typed-data signature with the wallet's Quai key. */
+  async signQuaiTypedData(walletId: string, typed: { domain: Record<string, unknown>; types: Record<string, { name: string; type: string }[]>; message: Record<string, unknown> }): Promise<string> {
+    const { mnemonic, wallet } = await unlockedWallet(walletId);
+    touchSession();
+    const signature = await signQuaiTypedData(mnemonic, wallet.index, typed.domain as never, typed.types, typed.message);
+    logEvent('security', 'Quai typed data signed', 'success');
+    return signature;
+  }
+
+  /** Sign and broadcast a Quai transaction, recording it in history. */
+  async sendQuaiTransaction(walletId: string, chainKey: string, tx: QuaiTxRequest): Promise<string> {
+    const network = requireQuaiNetwork(chainKey);
+    const { mnemonic, wallet } = await unlockedWallet(walletId);
+    touchSession();
+    logEvent('security', `Signing transaction for ${network.name}...`, 'info');
+    try {
+      const sent = await sendQuaiTransaction(mnemonic, wallet.index, network, tx);
+      const vault = await getVault();
+      await recordHistory(vault, {
+        hash: sent.hash,
+        from: sent.from,
+        to: tx.to,
+        value: ethers.formatUnits(tx.value ?? 0n, 18),
+        chainKey,
+        isContractCall: !!tx.data && tx.data !== '0x',
+      });
+      logEvent('rpc', `Quai TX Broadcasted: ${sent.hash}`, 'success');
+      return sent.hash;
+    } catch (e) {
+      logEvent('security', `Quai transaction failed: ${errorMessage(e)}`, 'error');
+      throw new Error(quaiErrorMessage(e));
     }
   }
 
@@ -1153,6 +1248,11 @@ export const deriveAddress = (mnemonic: string, index: number, chainId: string =
       return keypair.getPublicKey().toSuiAddress();
     }
 
+    // 5. Quai (Pelagus-compatible Cyprus-1 account; same address on every Quai network)
+    if (chain?.kind === 'quai') {
+      return deriveQuaiAddress(mnemonic, index);
+    }
+
     return PLACEHOLDER_ADDRESS;
   } catch (e) {
     console.error("Address Derivation Error:", e);
@@ -1182,6 +1282,7 @@ export const isValidAddressForChain = (address: string, chainKey: string): boole
       try { bitcoin.address.toOutputScript(trimmed, bitcoin.networks.bitcoin); return true; } catch { return false; }
     case 'tron':
       try { tronToHexAddress(trimmed); return true; } catch { return false; }
+    case 'quai': return isCyprus1QuaiAddress(trimmed);
     default: return false;
   }
 };
@@ -1193,7 +1294,13 @@ const toWalletData = (w: StoredWallet, chainId: string): WalletData => {
     name: w.name,
     address,
     index: w.index,
-    accounts: [{ chainId, address, derivationPath: derivationPathFor(chainId, w.index) }],
+    accounts: [{
+      chainId,
+      address,
+      derivationPath: CHAINS[chainId]?.kind === 'quai' && sessionMnemonic
+        ? quaiDerivationPath(sessionMnemonic, w.index)
+        : derivationPathFor(chainId, w.index),
+    }],
     createdAt: w.createdAt
   };
 };
@@ -1429,6 +1536,10 @@ export const fetchNativeBalance = async (address: string, chainKey: string): Pro
     }
     case 'evm': {
       const balance = await withEvmProvider(chainKey, provider => provider.getBalance(address));
+      return ethers.formatUnits(balance, decimals);
+    }
+    case 'quai': {
+      const balance = await fetchQuaiBalance(requireQuaiNetwork(chainKey), address);
       return ethers.formatUnits(balance, decimals);
     }
     default:

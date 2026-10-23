@@ -4,7 +4,7 @@
  * - bitcoin: BIP84 native SegWit, Esplora REST
  * - sui:     Ed25519, Sui JSON-RPC
  * - tron:    secp256k1 keys with Base58Check addresses (read-only in Bolt XR)
- * - quai:    sharded address space (not yet supported)
+ * - quai:    Quai-ledger accounts in the Cyprus-1 zone (quais SDK, see ./quai.ts)
  */
 export type ChainKind = 'evm' | 'bitcoin' | 'sui' | 'tron' | 'quai';
 
@@ -100,17 +100,33 @@ export const CHAINS: Record<string, ChainConfig> = {
   },
   quai: {
     name: "Quai Network",
-    id: "969",
-    chainId: 969,
+    id: "9",
+    chainId: 9,
     kind: 'quai',
-    rpc: "https://quaiscan.io/api/eth-rpc",
+    // Cyprus-1 zone endpoint: prime/region endpoints refuse calls and balances.
+    rpc: "https://rpc.quai.network/cyprus1",
     explorer: "https://quaiscan.io",
     explorerTxPath: "/tx/",
     nativeCurrency: { name: "Quai", symbol: "QUAI", decimals: 18 },
-    derivationPath: "m/44'/969'/0'/0/0",
+    derivationPath: "m/44'/994'/0'/0/{cyprus-1 index}",
     color: "#E74C3C",
     logo: "https://quaiscan.io/images/quai-logo.svg",
-    canSend: false,
+    canSend: true,
+    canSwap: false,
+  },
+  quai_orchard: {
+    name: "Quai Orchard Testnet",
+    id: "15000",
+    chainId: 15000,
+    kind: 'quai',
+    rpc: "https://orchard.rpc.quai.network/cyprus1",
+    explorer: "https://orchard.quaiscan.io",
+    explorerTxPath: "/tx/",
+    nativeCurrency: { name: "Quai", symbol: "QUAI", decimals: 18 },
+    derivationPath: "m/44'/994'/0'/0/{cyprus-1 index}",
+    color: "#E74C3C",
+    logo: "https://quaiscan.io/images/quai-logo.svg",
+    canSend: true,
     canSwap: false,
   },
   monad: {
@@ -225,7 +241,7 @@ export const CHAINS: Record<string, ChainConfig> = {
 };
 
 /** Chains shown in the wallet UI (both 2D and XR stacks). */
-export const SELECTED_CHAINS = ['ethereum', 'polygon', 'bsc', 'monad', 'bitcoin', 'sui', 'tron'];
+export const SELECTED_CHAINS = ['ethereum', 'quai', 'polygon', 'bsc', 'monad', 'bitcoin', 'sui', 'tron'];
 
 export const getChain = (chainKey: string): ChainConfig | undefined => CHAINS[chainKey];
 
