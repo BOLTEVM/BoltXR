@@ -17,17 +17,32 @@ const StackLoading = () => (
 
 const WalletXR = dynamic(() => import('@/components/WalletXR'), { ssr: false, loading: StackLoading });
 const HandTrackWallet = dynamic(() => import('@/components/HandTrackWallet'), { ssr: false, loading: StackLoading });
+const GameBrowser = dynamic(() => import('@/components/browser/GameBrowser'), { ssr: false, loading: StackLoading });
+
+type View = 'landing' | 'wallet' | 'browser';
 
 export default function Home() {
-  const [isLanding, setIsLanding] = useState(true);
+  const [view, setView] = useState<View>('landing');
+  // Where "Back" in the game browser returns to.
+  const [browserReturn, setBrowserReturn] = useState<Exclude<View, 'browser'>>('landing');
   const { activeStack, setActiveStack } = useSettings();
 
-  if (isLanding) {
+  const openBrowser = (from: Exclude<View, 'browser'>) => {
+    setBrowserReturn(from);
+    setView('browser');
+  };
+
+  if (view === 'browser') {
+    return <main><GameBrowser onExit={() => setView(browserReturn)} /></main>;
+  }
+
+  if (view === 'landing') {
     return (
       <LandingPage
         lastStack={activeStack}
-        onEnter={() => { setActiveStack('XR'); setIsLanding(false); }}
-        onEnterHandtrack={() => { setActiveStack('2D'); setIsLanding(false); }}
+        onEnter={() => { setActiveStack('XR'); setView('wallet'); }}
+        onEnterHandtrack={() => { setActiveStack('2D'); setView('wallet'); }}
+        onOpenBrowser={() => openBrowser('landing')}
       />
     );
   }
@@ -35,9 +50,9 @@ export default function Home() {
   return (
     <main>
       {activeStack === 'XR' ? (
-        <WalletXR onExit={() => setIsLanding(true)} />
+        <WalletXR onExit={() => setView('landing')} onOpenBrowser={() => openBrowser('wallet')} />
       ) : (
-        <HandTrackWallet onExit={() => setIsLanding(true)} />
+        <HandTrackWallet onExit={() => setView('landing')} onOpenBrowser={() => openBrowser('wallet')} />
       )}
     </main>
   );
