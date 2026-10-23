@@ -11,7 +11,9 @@
     "electron:dev": "concurrently -k \"npm run dev\" \"electron .\"",
     "electron:build": "npm run build && electron-builder",
     "vendor": "node scripts/copy-vendor-assets.mjs",
-    "electron:preview": "npm run build && electron . --serve-static"
+    "electron:preview": "npm run build && electron . --serve-static",
+    "test:browser": "node scripts/test-browser-policy.mjs",
+    "test:e2e": "node e2e/run.mjs"
   },
   "build": {
     "appId": "com.bolt.xr.wallet",
@@ -76,6 +78,7 @@
     "next": "16.1.0",
     "process": "^0.11.10",
     "qrcode": "^1.5.4",
+    "quais": "1.0.0-alpha.57",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-webcam": "^7.2.0",
@@ -96,9 +99,11 @@
     "concurrently": "^9.2.1",
     "electron": "^41.5.0",
     "electron-builder": "^26.8.1",
+    "esbuild": "0.24.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
     "iwer": "^2.2.1",
+    "playwright": "1.49.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

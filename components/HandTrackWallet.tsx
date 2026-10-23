@@ -61,7 +61,7 @@ const rectOf = (el: Element | null): Rect | null => {
   return { x: r.left, y: r.top, w: r.width, h: r.height };
 };
 
-const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+const HandTrackWallet: React.FC<{ onExit: () => void; onOpenBrowser?: () => void }> = ({ onExit, onOpenBrowser }) => {
   const { setShowSettings, showSettings, modelComplexity } = useSettings();
   const wallet = useWallet();
   const webcamRef = useRef<Webcam>(null);
@@ -319,6 +319,10 @@ const HandTrackWallet: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         onOpenSettings={() => setShowSettings(true)}
         onOpenQR={() => setQr({ open: true, tab: 'receive' })}
         onOpenContracts={() => setContracts({ open: true })}
+        onOpenBrowser={onOpenBrowser && (() => {
+          lovense.stopAll();
+          onOpenBrowser();
+        })}
       />
 
       {camera === 'denied' && (
