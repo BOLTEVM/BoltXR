@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { XR, createXRStore } from '@react-three/xr';
-import { Settings, Gamepad2 } from 'lucide-react';
+import { Settings, Gamepad2, Home, WalletCards, ArrowLeftRight, Sprout, ScanLine } from 'lucide-react';
+import { ACESFilmicToneMapping } from 'three';
 import { useSettings } from '@/hooks/useSettings';
 import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
 import '@/lib/xr-text';
@@ -72,7 +73,7 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
     return (
         <div className="h-screen w-screen bg-black relative">
             {/* Minimal Overlay for Control */}
-            <div className="absolute top-6 left-6 z-10 glass p-6 rounded-2xl flex flex-col gap-6 max-w-[280px]">
+            <div className="absolute top-4 right-4 z-10 glass p-4 rounded-2xl flex flex-col gap-4 w-[240px]">
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-black text-white tracking-tighter">BOLT XR</h1>
@@ -135,6 +136,26 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
                 )}
             </div>
 
+            {/* Keyboard-accessible desktop mirror of the same in-scene watch actions. */}
+            <nav aria-label="Wrist OS shortcuts" className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 glass rounded-2xl p-1.5 flex gap-1">
+                {([
+                    ['home', 'Home', Home],
+                    ['pay', 'Pay', WalletCards],
+                    ['swap', 'Swap', ArrowLeftRight],
+                    ['farm', 'Farm', Sprout],
+                    ['scan', 'Scan', ScanLine],
+                ] as const).map(([view, label, Icon]) => (
+                    <button
+                        key={view}
+                        type="button"
+                        className="btn btn-sm btn-ghost px-3"
+                        onClick={() => window.dispatchEvent(new CustomEvent('boltxr:watch-view', { detail: view }))}
+                    >
+                        <Icon size={14} aria-hidden /> {label}
+                    </button>
+                ))}
+            </nav>
+
             {contextLost && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#020617]/90 p-4" role="alert">
                     <div className="glass rounded-2xl p-6 max-w-sm text-center flex flex-col gap-4">
@@ -152,8 +173,12 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
 
             <Canvas
                 shadows
-                camera={{ position: [0, 1.6, 3], fov: 50 }}
+                dpr={[1, 1.5]}
+                gl={{ antialias: true, powerPreference: 'high-performance' }}
+                camera={{ position: [0, 1.6, 3], fov: 50, near: 0.03, far: 180 }}
                 onCreated={({ gl }) => {
+                    gl.toneMapping = ACESFilmicToneMapping;
+                    gl.toneMappingExposure = 1.08;
                     gl.domElement.addEventListener('webglcontextlost', (e) => {
                         e.preventDefault();
                         setContextLost(true);

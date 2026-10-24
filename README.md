@@ -12,9 +12,13 @@
 - **BIP39/BIP44 Standard**: Industrial-strength mnemonic management with standardized derivation paths for cross-wallet compatibility.
 
 ### 2. Immersive Spatial UI/UX
-- **Depth-Aware Terminal**: Floating glassmorphic interfaces built with `RoundedBox` geometry for a tactile, physical presence in 3D space.
+- **Toggleable Wrist OS**: A sculpted titanium/ceramic-style wrist watch follows the left hand or XR controller. The crown opens the interface; Home, Pay, Swap, Farm, and Scan controls are also available as keyboard-accessible desktop shortcuts.
+- **Focused XR Workflows**: Swap and transfer panels move in front of the HMD while in use. Receive generates a chain-aware address QR; copy and paste controls, explicit send review, and QR-to-send handoff reduce address retyping.
+- **Live Yield Radar**: Farm scans DeFiLlama pools, filters by TVL, APY, and stablecoin exposure, and presents risk heuristics plus base/reward APY. Projection bars illustrate daily compounding for a selected amount and term; they are estimates, not guaranteed returns or financial advice.
+- **Camera-Aware QR Scanner**: EIP-681, BIP-21, and plain wallet addresses are validated before entering the send flow. Camera tracks stop when scanning closes, and permission, unavailable-camera, and frame-timeout states offer a paste fallback.
 - **Dynamic Telemetry**: Chain-specific transaction data including Bitcoin fee density (sats/vB), Sui gas estimation, and EVM gas prices.
-- **Procedural 3D Assets**: Real-time rendered metallic tokens and an interactive **Swap Scale** for physics-based asset exchanges.
+
+Camera availability depends on the headset browser, WebXR implementation, and user permission. Desktop browser tests do not replace on-device HMD camera, hand-tracking, controller, comfort, or performance validation.
 
 ### 3. Hardened Security
 - **Immersive PIN Pad**: A fully sandboxed, in-scene authentication system with anti-brute force lockouts and haptic feedback.
@@ -139,8 +143,9 @@ pnpm build && pnpm test:e2e  # real Electron app + BEAM's own wallet code + a ve
 throwaway profile, never your vault. On a Linux server, wrap it in `xvfb-run -a`.
 
 ## 📜 Security & Distribution
-- **Audit Status**: Experimental. Use for spatial development and demonstration.
-- **Asset Optimization**: All 3D assets are optimized for high-performance WebGL rendering (90fps+).
+- **Audit Status**: No independent production security audit has been completed. Validate real transactions and device behavior before handling significant funds.
+- **Spatial Validation**: Run `node scripts/verify-wrist-os.mjs` for the desktop interaction and deterministic QR-camera smoke test. Live pool data requires network access. On-device headset validation remains a separate release gate.
+- **Asset Optimization**: Geometry, pixel ratio, lighting, and tone mapping are bounded for XR; frame rate must be measured on the target headset.
 
 ---
 Built with ❤️ by the **BOLT XR** Team.
