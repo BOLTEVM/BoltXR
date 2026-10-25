@@ -4,8 +4,8 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "npm run vendor && next dev",
-    "build": "npm run vendor && next build",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run vendor && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "concurrently -k \"npm run dev\" \"electron .\"",

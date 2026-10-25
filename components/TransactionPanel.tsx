@@ -14,16 +14,20 @@ interface TransactionPanelProps {
     onClose: () => void;
     /** Start a swap with this token as the source (shown for swappable chains). */
     onStartSwap?: (token: Token) => void;
+    /** Watch payment shortcuts can open directly at recipient entry. */
+    initialStep?: Step;
+    initialRecipient?: string;
+    onScanRequest?: (chainKey: string) => void;
 }
 
 type Step = 'overview' | 'recipient' | 'amount' | 'review' | 'sending' | 'done';
 
-export default function TransactionPanel({ token, onClose, onStartSwap }: TransactionPanelProps) {
+export default function TransactionPanel({ token, onClose, onStartSwap, initialStep = 'overview', initialRecipient = '', onScanRequest }: TransactionPanelProps) {
     const wallet = useWallet();
     const { validateAddress, parseAmount, estimateFee, send } = wallet;
     const chain = CHAINS[token.chainKey];
-    const [step, setStep] = useState<Step>('overview');
-    const [recipient, setRecipient] = useState('');
+    const [step, setStep] = useState<Step>(initialStep);
+    const [recipient, setRecipient] = useState(initialRecipient);
     const [amount, setAmount] = useState('');
     const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
     const [fee, setFee] = useState<string | null>(null);
@@ -173,7 +177,8 @@ export default function TransactionPanel({ token, onClose, onStartSwap }: Transa
                         <Text position={[0, 0.38, 0.01]} fontSize={0.04} color={recipient ? XR_THEME.text : XR_THEME.faint} anchorX="center" maxWidth={1.2} textAlign="center">
                             {recipient || 'NO ADDRESS YET'}
                         </Text>
-                        <Button3D label="PASTE ADDRESS" onPress={pasteFromClipboard} position={[0, 0.05, 0]} width={1.1} height={0.2} color={XR_THEME.brand} />
+                        <Button3D label="▣  PASTE ADDRESS" onPress={pasteFromClipboard} position={[0, 0.05, 0]} width={1.1} height={0.2} color={XR_THEME.brand} />
+                        {onScanRequest && <Button3D label="⌗  SCAN RECIPIENT QR" onPress={() => onScanRequest(token.chainKey)} position={[0, -0.22, 0]} width={1.1} height={0.2} color="#0891b2" />}
                         <Button3D label="BACK" onPress={() => { setStep('overview'); setMessage(null); }} position={[-0.3, -0.9, 0]} width={0.5} height={0.16} />
                         <Button3D label="NEXT" onPress={() => { setMessage(null); setStep('amount'); }} position={[0.3, -0.9, 0]} width={0.5} height={0.16} color={XR_THEME.info} disabled={!recipient} />
                     </group>
