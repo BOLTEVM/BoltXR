@@ -9,7 +9,7 @@ interface DialogProps {
   onClose: () => void;
   title: React.ReactNode;
   icon?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Rendered between the header and the scrollable body (e.g. tabs). */
   toolbar?: React.ReactNode;
   footer?: React.ReactNode;

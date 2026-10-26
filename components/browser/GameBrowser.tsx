@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Download, Gamepad2, Home, Link2, Lock, LockOpen, LogOut, RotateCw, Unlink, X,
+  ArrowLeft, ArrowRight, Cookie, Download, Gamepad2, Home, Link2, Lock, LockOpen, LogOut, Plus, RotateCw, Shield, Trash2, Unlink, X,
 } from 'lucide-react';
 import VaultDialog from '../VaultDialog';
 import { useWallet } from '@/hooks/useWallet';
@@ -56,13 +56,14 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
   const [address, setAddress] = useState('');
   const [editing, setEditing] = useState(false);
   const [showHome, setShowHome] = useState(() => !browserState?.url || browserState.url === 'about:blank');
+  const [showShields, setShowShields] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasPage = !!browserState?.url && browserState.url !== 'about:blank';
   const fullscreen = !!browserState?.fullscreen;
   // The page is a native layer above this window: hide it whenever our own UI must be seen.
-  const pageVisible = hasPage && !showHome && !vaultOpen && !showSettings;
+  const pageVisible = hasPage && !showHome && !showShields && !vaultOpen && !showSettings;
 
   const quai = wallet.status === 'unlocked' ? wallet.addresses.quai : undefined;
   const origin = browserState?.origin ?? null;
@@ -106,6 +107,16 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
     }
     setEditing(false);
     setShowHome(false);
+    setShowShields(false);
+  };
+
+  const newTab = async () => {
+    const id = await desktop.browser.newTab();
+    if (id !== null) {
+      setShowHome(true);
+      setShowShields(false);
+      setError(null);
+    }
   };
 
   const accountPill = wallet.status === 'unlocked' && quai ? (
@@ -121,6 +132,25 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
   return (
     <div className="fixed inset-0 z-20 flex flex-col bg-[#020617] text-white" data-testid="game-browser">
       {!fullscreen && (
+        <>
+        <nav className="flex items-center gap-1 overflow-x-auto border-b border-white/10 bg-slate-950/95 px-2 py-1.5" aria-label="Chromium tabs">
+          {(browserState?.tabs ?? []).map(tab => (
+            <div key={tab.id} className={`group flex min-w-0 max-w-56 flex-1 items-center rounded-lg border text-xs ${tab.id === browserState?.tabId ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-100' : 'border-transparent text-slate-400 hover:bg-white/5'}`}>
+              <button
+                type="button"
+                className="min-w-0 flex-1 truncate px-3 py-2 text-left"
+                onClick={() => { desktop.browser.activateTab(tab.id); setShowHome(false); setShowShields(false); }}
+                data-testid={`browser-tab-${tab.id}`}
+                title={tab.url || 'New isolated tab'}
+              >
+                {tab.loading ? '◌ ' : ''}{tab.title || 'New isolated tab'}
+              </button>
+              <button type="button" className="p-2 text-slate-500 hover:text-rose-300" aria-label={`Close ${tab.title || 'tab'}`} onClick={() => desktop.browser.closeTab(tab.id)}><X size={12} /></button>
+            </div>
+          ))}
+          <button type="button" className="icon-btn shrink-0" onClick={newTab} aria-label="New isolated tab" title="New isolated tab" data-testid="new-tab"><Plus size={16} /></button>
+          <span className="ml-auto hidden shrink-0 items-center gap-1 px-2 text-[10px] text-emerald-300 sm:flex"><Shield size={12} /> Isolated per tab</span>
+        </nav>
         <header className="glass-dark flex items-center gap-2 px-3 py-2 border-b border-white/10">
           <button type="button" className="icon-btn" onClick={onExit} aria-label="Back to wallet" title="Back to wallet"><LogOut size={16} /></button>
           <button type="button" className="icon-btn" onClick={() => setShowHome(true)} aria-label="Browser home" title="Home"><Home size={16} /></button>
@@ -158,6 +188,13 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
               : <span className="pill hidden md:inline-flex" title="This site has not asked to connect">Not linked</span>
           )}
 
+          <button
+            type="button"
+            className={`icon-btn ${showShields ? 'text-emerald-300 bg-emerald-400/10' : ''}`}
+            onClick={() => { setShowShields(!showShields); setShowHome(false); }}
+            aria-label="Bolt Shield privacy controls"
+            title="Bolt Shield privacy controls"
+          ><Shield size={16} /></button>
           <label className="sr-only" htmlFor="quai-network">Quai network</label>
           <select
             id="quai-network"
@@ -170,6 +207,7 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
           </select>
           {accountPill}
         </header>
+        </>
       )}
 
       {(error || browserState?.error) && !showHome && !fullscreen && (
@@ -180,7 +218,40 @@ function DesktopBrowser({ onExit }: { onExit: () => void }) {
       {notice && !fullscreen && <div className="notice notice-warning mx-3 mt-2" role="status">{notice}</div>}
 
       <div ref={viewportRef} className="relative flex-1 min-h-0" data-testid="browser-viewport">
-        {(showHome || !hasPage) && (
+        {showShields && (
+          <div className="absolute inset-0 overflow-auto bg-[#020617]">
+            <div className="mx-auto flex max-w-2xl flex-col gap-5 px-5 py-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-2xl font-semibold"><Shield className="text-emerald-300" /> Bolt Shield</div>
+                  <p className="mt-1 text-sm text-slate-400">Protection for this isolated Chromium tab. No cookies or storage are shared with other tabs or your vault.</p>
+                </div>
+                <button type="button" className="icon-btn" onClick={() => setShowShields(false)} aria-label="Close privacy controls"><X size={18} /></button>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="glass rounded-2xl p-4"><div className="text-2xl font-semibold text-emerald-300">{browserState?.stats.trackers ?? 0}</div><div className="text-xs text-slate-400">Trackers blocked</div></div>
+                <div className="glass rounded-2xl p-4"><div className="text-2xl font-semibold text-cyan-300">{browserState?.stats.cookies ?? 0}</div><div className="text-xs text-slate-400">Cookie attempts stripped</div></div>
+                <div className="glass rounded-2xl p-4"><div className="text-2xl font-semibold">{browserState?.stats.requests ?? 0}</div><div className="text-xs text-slate-400">Subresource requests</div></div>
+              </div>
+              <div className="glass flex items-center gap-4 rounded-2xl p-4">
+                <Shield className="shrink-0 text-emerald-300" />
+                <div className="min-w-0 flex-1"><div className="font-medium">Tracker shield</div><div className="text-xs text-slate-400">Block known third-party analytics, advertising, and behavior-tracking hosts.</div></div>
+                <button type="button" role="switch" aria-checked={browserState?.shields.trackers ?? true} data-testid="shield-toggle-trackers" className={`rounded-full px-3 py-1.5 text-xs font-semibold ${browserState?.shields.trackers !== false ? 'bg-emerald-500 text-emerald-950' : 'bg-slate-700'}`} onClick={() => desktop.browser.setShield('trackers', !(browserState?.shields.trackers ?? true))}>{browserState?.shields.trackers !== false ? 'ON' : 'OFF'}</button>
+              </div>
+              <div className="glass flex items-center gap-4 rounded-2xl p-4">
+                <Cookie className="shrink-0 text-cyan-300" />
+                <div className="min-w-0 flex-1"><div className="font-medium">Third-party cookie shield</div><div className="text-xs text-slate-400">Strip cross-site Cookie and Set-Cookie headers while preserving first-party sign-in.</div></div>
+                <button type="button" role="switch" aria-checked={browserState?.shields.thirdPartyCookies ?? true} data-testid="shield-toggle-cookies" className={`rounded-full px-3 py-1.5 text-xs font-semibold ${browserState?.shields.thirdPartyCookies !== false ? 'bg-emerald-500 text-emerald-950' : 'bg-slate-700'}`} onClick={() => desktop.browser.setShield('thirdPartyCookies', !(browserState?.shields.thirdPartyCookies ?? true))}>{browserState?.shields.thirdPartyCookies !== false ? 'ON' : 'OFF'}</button>
+              </div>
+              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4 text-xs leading-relaxed text-amber-100/80">
+                HTTPS-only navigation, sandboxed renderers, blocked downloads/popups, restricted permissions, and explicit wallet approvals remain on. Bolt Shield does not make a malicious site safe.
+              </div>
+              <button type="button" className="btn border-rose-400/20 text-rose-200" disabled={!browserState?.tabId} onClick={() => { void desktop.browser.clearSiteData(); }}><Trash2 size={15} /> Clear this tab&apos;s cookies, cache, and site data</button>
+              {hasPage && <button type="button" className="btn btn-primary" onClick={() => setShowShields(false)}>Return to page</button>}
+            </div>
+          </div>
+        )}
+        {(showHome || !hasPage) && !showShields && (
           <div className="absolute inset-0 overflow-auto">
             <div className="mx-auto max-w-4xl px-4 py-8 flex flex-col gap-8">
               <section>

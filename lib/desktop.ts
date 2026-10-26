@@ -3,7 +3,35 @@
  * the web and headset builds, which have no game browser.
  */
 
+export interface BrowserTab {
+  id: number;
+  url: string;
+  title: string;
+  loading: boolean;
+}
+
+export interface BrowserShields {
+  trackers: boolean;
+  thirdPartyCookies: boolean;
+}
+
+export interface BrowserStats {
+  trackers: number;
+  cookies: number;
+  requests: number;
+}
+
+export interface BrowserCapture {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface BrowserState {
+  tabId: number | null;
+  tabs: BrowserTab[];
+  shields: BrowserShields;
+  stats: BrowserStats;
   url: string;
   origin: string | null;
   title: string;
@@ -34,9 +62,16 @@ export interface BoltxrDesktop {
   platform: string;
   quaiRpcOverrides?: Partial<Record<'mainnet' | 'orchard', string>>;
   browser: {
-    open(input: string): Promise<{ ok: true; url: string } | { ok: false; reason: string }>;
+    open(input: string, tabId?: number): Promise<{ ok: true; url: string; tabId: number } | { ok: false; reason: string }>;
+    newTab(): Promise<number | null>;
+    closeTab(id: number): void;
+    activateTab(id: number): void;
+    setShield(name: keyof BrowserShields, enabled: boolean): void;
+    clearSiteData(): Promise<void>;
+    capture(): Promise<BrowserCapture | null>;
+    input(payload: { type: 'click' | 'scroll'; x: number; y: number; deltaY?: number }): void;
     layout(state: { visible: boolean; bounds: BrowserBounds }): void;
-    command(name: 'back' | 'forward' | 'reload' | 'stop' | 'exit-fullscreen' | 'leave'): void;
+    command(name: 'back' | 'forward' | 'reload' | 'stop' | 'exit-fullscreen' | 'leave', tabId?: number): void;
     suspend(on: boolean): void;
     onState(cb: (state: BrowserState) => void): Unsubscribe;
     onFullscreen(cb: (payload: { on: boolean }) => void): Unsubscribe;

@@ -1,11 +1,21 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { Box, Shield, Hand, Globe, ArrowRight, Download, Lock, Timer, KeyRound, Github, Gamepad2 } from 'lucide-react';
+import { Box, Shield, Hand, Globe, ArrowRight, Download, Lock, Timer, KeyRound, Github, Gamepad2, Gem } from 'lucide-react';
 import { CHAINS, SELECTED_CHAINS } from '@/lib/boltows/chains';
 import { APP_VERSION, RELEASES_URL, REPO_URL } from '@/lib/app-info';
 import type { AppStack } from '@/hooks/useSettings';
+import { SELL_OUT_ETH } from '@/lib/mint/priceTable';
+import { rarityColor, thumbUrl } from './mint/rarity';
+import { editionInfo } from '@/lib/mint/editions';
+
+// three.js, the watch generator and MediaPipe load only when the modal opens
+const MintModal = dynamic(() => import('./mint/MintModal'), { ssr: false });
+
+const SHOWCASE = [1, 52, 101, 149, 150];
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -49,6 +59,9 @@ const SECURITY_POINTS = [
 
 export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, lastStack }: LandingPageProps) {
   const launchLast = lastStack === '2D' ? onEnterHandtrack : onEnter;
+  // `n` remounts the modal on every open (fresh state), and stays put while it closes (exit animation)
+  const [mint, setMint] = useState<{ open: boolean; edition?: number; n: number }>({ open: false, n: 0 });
+  const openMint = (edition?: number) => setMint(m => ({ open: true, edition, n: m.n + 1 }));
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-[#020617] text-white flex flex-col">
@@ -66,6 +79,7 @@ export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, 
         </a>
         <div className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-gray-400">
           <a href="#features" className="hover:text-white transition-colors">Platform</a>
+          <a href="#watches" className="hover:text-white transition-colors">Watches</a>
           <a href="#security" className="hover:text-white transition-colors">Security</a>
           <a href="#networks" className="hover:text-white transition-colors">Networks</a>
           <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</a>
@@ -121,6 +135,15 @@ export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, 
                 <Gamepad2 className="h-5 w-5 shrink-0 text-pink-400" aria-hidden />
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => openMint()}
+              className="mt-6 flex items-center gap-3 text-left text-sm text-gray-300 hover:text-white transition-colors"
+              data-testid="open-mint"
+            >
+              <Gem className="h-4 w-4 text-pink-300 shrink-0" aria-hidden />
+              <span>Try on and mint an Iced-Out XR Watch — 150 wrist wallets for XR</span>
+            </button>
             <a
               href={RELEASES_URL}
               target="_blank"
@@ -201,6 +224,45 @@ export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, 
         </div>
       </section>
 
+
+      {/* Iced-Out XR Watches */}
+      <section id="watches" className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-8 py-12 scroll-mt-8">
+        <div className="watch-promo rounded-[28px] p-7 sm:p-10 grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-10 items-center">
+          <div>
+            <h2 className="text-5xl sm:text-6xl leading-[0.92] mb-4">Iced-Out XR Watches</h2>
+            <p className="text-sm text-gray-300 leading-relaxed max-w-md mb-6">
+              150 gem-set watches that wrap your wrist in VR and passthrough. Each one is a working wallet: press the
+              crown for Pay, Swap, Farm and Scan, and read your portfolio, fees and yield on its dial. Only the holder can wear it.
+            </p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-md mb-8 text-sm">
+              <div><dt className="text-gray-500 text-xs mb-1">Editions</dt><dd>150, minted in order</dd></div>
+              <div><dt className="text-gray-500 text-xs mb-1">Price</dt><dd>0.001 ETH for #1, rising to 1 ETH for #150</dd></div>
+              <div><dt className="text-gray-500 text-xs mb-1">Try before you mint</dt><dd>On a display arm or your own wrist, by camera</dd></div>
+              <div><dt className="text-gray-500 text-xs mb-1">Sell-out total</dt><dd className="mono">{SELL_OUT_ETH.toFixed(2)} ETH</dd></div>
+            </dl>
+            <button type="button" onClick={() => openMint()} className="btn btn-lg btn-primary">
+              Try on and mint <ArrowRight className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          <ul className="watch-promo-row" aria-label="Featured editions">
+            {SHOWCASE.map(id => {
+              const s = editionInfo(id);
+              return (
+                <li key={id}>
+                  <button type="button" onClick={() => openMint(id)} className="watch-promo-card" style={{ ['--rarity' as string]: rarityColor(s.rarity) }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- static export */}
+                    <img src={thumbUrl(id)} alt="" width={160} height={160} loading="lazy" onError={e => { e.currentTarget.style.visibility = 'hidden'; }} />
+                    <span className="mono text-[10px] text-gray-400">#{String(id).padStart(3, '0')}</span>
+                    <span className="text-xs leading-tight">{s.edition}</span>
+                    <span className="text-[10px]" style={{ color: 'var(--rarity)' }}>{s.rarity}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </section>
+
       {/* Security */}
       <section id="security" className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-8 py-12 scroll-mt-8">
         <div className="glass rounded-[28px] p-7 sm:p-10 grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-8 items-start">
@@ -243,6 +305,8 @@ export default function LandingPage({ onEnter, onEnterHandtrack, onOpenBrowser, 
           </div>
         </div>
       </section>
+
+      <MintModal key={mint.n} open={mint.open} initialEdition={mint.edition} onClose={() => setMint(m => ({ ...m, open: false }))} />
 
       {/* Footer */}
       <footer className="relative z-10 py-8 border-t border-white/5 text-gray-500 text-[10px] font-bold uppercase tracking-[0.3em]">

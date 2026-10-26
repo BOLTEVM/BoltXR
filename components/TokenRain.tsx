@@ -3,7 +3,6 @@
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group } from 'three';
-import { CHAINS } from '@/lib/boltows/chains';
 
 interface CoinSpec {
   id: number;
@@ -53,20 +52,22 @@ function FallingCoin({ color, start, speed, spin, respawn }: CoinSpec) {
   );
 }
 
-export default function TokenRain({ count = 50 }: { count?: number }) {
+/** Falling coins in the given colours (the scene passes the colours of the coins you hold). */
+export default function TokenRain({ count = 50, colors = ['#d4af37'] }: { count?: number; colors?: string[] }) {
+  const palette = colors.join(',');
   const coins = useMemo<CoinSpec[]>(() => {
-    const colors = Object.values(CHAINS).map(chain => chain.color);
+    const list = palette.split(',');
     const rand = mulberry32(0xb017);
     const spread = (range: number) => (rand() - 0.5) * range;
     return Array.from({ length: count }, (_, i) => ({
       id: i,
-      color: colors[i % colors.length],
+      color: list[i % list.length],
       start: [spread(20), 5 + rand() * 10, spread(20)],
       speed: 1 + rand() * 3,
       spin: [rand(), rand(), rand()],
       respawn: () => [spread(20), spread(20)],
     }));
-  }, [count]);
+  }, [count, palette]);
 
   return (
     <group>

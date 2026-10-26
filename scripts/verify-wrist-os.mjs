@@ -109,8 +109,14 @@ try {
   await page.screenshot({ path: path.join(artifacts, '04-qr-verified.png'), fullPage: true });
   stage('captured QR scanner result');
 
+  await page.getByRole('button', { name: 'Web', exact: true }).click();
+  await page.waitForTimeout(2500);
+  await page.locator('canvas[data-engine^="three.js"]').waitFor({ state: 'visible' });
+  await page.screenshot({ path: path.join(artifacts, '05-web-fallback.png'), fullPage: true });
+  stage('captured honest web-only Chromium fallback');
+
   await writeFile(path.join(artifacts, 'runtime.json'), JSON.stringify({ errors, serverLog }, null, 2));
-  console.log(JSON.stringify({ screenshots: ['01-watch-home.png', '02-yield-radar.png', '03-pay-receive.png', '04-qr-verified.png'], errors }, null, 2));
+  console.log(JSON.stringify({ screenshots: ['01-watch-home.png', '02-yield-radar.png', '03-pay-receive.png', '04-qr-verified.png', '05-web-fallback.png'], errors }, null, 2));
 } finally {
   clearTimeout(watchdog);
   await browser?.close();
