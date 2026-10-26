@@ -18,6 +18,8 @@ Use a dedicated test vault with small amounts. Do not record recovery phrases, p
 ## 1. Setup and browser security
 
 - [ ] Serve the release candidate over HTTPS, or use the packaged app's trusted application origin.
+      For a dev build: `pnpm dev:quest:usb` (USB, then `http://localhost:3000` on the headset) or
+      `pnpm dev:quest` (Wi-Fi, `https://<PC address>:3000`); see README, "Opening the dev server on a Meta Quest".
 - [ ] Confirm native WebXR is available without desktop XR emulation flags.
 - [ ] Enter and exit immersive VR repeatedly; the scene resumes without a blank canvas or duplicate interface.
 - [ ] Confirm camera and clipboard permission prompts are understandable and only appear when needed.
@@ -38,6 +40,8 @@ Test once with controllers and once with hand tracking where supported.
 - [ ] Buttons have clear hover/pressed states and do not trigger twice from one pinch or controller press.
 - [ ] Adjacent buttons are difficult to hit accidentally; text remains readable at the intended viewing distance.
 - [ ] Expanded panels appear in front of the HMD, not behind the user or inside world geometry.
+- [ ] The scene dock sits at waist height in front of you; each of the five tiles can be poked with a
+      finger and picked with a controller ray, lights up on hover, and the current scene is framed.
 - [ ] Closing a task restores the normal scene and watch state.
 - [ ] Rapidly switching tasks does not leave duplicate panels, stale data, or an active camera.
 - [ ] Recentering the headset produces a usable layout.

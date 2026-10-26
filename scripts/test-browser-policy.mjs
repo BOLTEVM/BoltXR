@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const policy = createRequire(import.meta.url)('../electron/browser-policy.js');
+const privacy = createRequire(import.meta.url)('../electron/privacy-policy.js');
 
 const { isAllowedTopLevelUrl: top, isBlockedFrameUrl: blocked, normaliseAddressInput: norm, walletOriginFor: origin, routeProviderMethod: route } = policy;
 
@@ -55,4 +56,21 @@ assert.equal(route('x'.repeat(100)).route, 'refuse');
 assert.equal(policy.BROWSER_PERMISSIONS.has('keyboardLock'), false);
 for (const p of ['media', 'geolocation', 'notifications', 'hid', 'usb', 'serial', 'openExternal']) assert.equal(policy.BROWSER_PERMISSIONS.has(p), false, p);
 
-console.log('browser policy: all checks passed');
+// Tracker and third-party cookie shields never block a first-party page.
+const doc = 'https://wallet.example/account';
+assert.equal(privacy.isThirdParty('https://cdn.wallet.example/a.js', doc), false);
+assert.equal(privacy.isThirdParty('https://cdn.other-example.net/a.js', doc), true);
+assert.equal(privacy.isTracker('https://www.google-analytics.com/collect', doc), true);
+assert.equal(privacy.isTracker('https://www.google-analytics.com/', ''), false, 'top-level navigation is not a tracker request');
+assert.equal(privacy.isTracker('https://safe.example/app.js', doc), false);
+assert.equal(privacy.isThirdParty('https://shop.example.co.uk/', 'https://cdn.example.co.uk/'), false);
+assert.equal(privacy.isThirdParty('https://shop.example.co.uk/', 'https://other.co.uk/'), true);
+assert.deepEqual(privacy.shouldBlockRequest({ url: 'https://clarity.ms/collect', documentURL: doc, resourceType: 'script' }, { trackers: true }), 'tracker');
+assert.equal(privacy.shouldBlockRequest({ url: 'https://clarity.ms/', documentURL: '', resourceType: 'mainFrame' }, { trackers: true }), null);
+assert.equal(privacy.shouldStripCookie({ url: 'https://cdn.other-example.net/a', documentURL: doc }, { thirdPartyCookies: true }), true);
+assert.equal(privacy.shouldStripCookie({ url: 'https://cdn.wallet.example/a', documentURL: doc }, { thirdPartyCookies: true }), false);
+const headers = { Cookie: 'secret=1', Accept: '*/*' };
+assert.equal(privacy.removeHeader(headers, 'cookie'), true);
+assert.deepEqual(headers, { Accept: '*/*' });
+
+console.log('browser and privacy policies: all checks passed');

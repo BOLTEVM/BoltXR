@@ -114,7 +114,7 @@ function routeProviderMethod(method) {
  * Permissions a page in the game browser gets. Everything else is refused.
  * No keyboardLock: Esc must always take the person out of a fullscreen page.
  */
-const BROWSER_PERMISSIONS = new Set(['fullscreen', 'pointerLock', 'clipboard-sanitized-write']);
+const BROWSER_PERMISSIONS = new Set(['fullscreen', 'pointerLock', 'clipboard-sanitized-write', 'xr', 'vr', 'xr-spatial-tracking']);
 
 module.exports = {
   HOME_SITES,
