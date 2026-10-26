@@ -40,7 +40,7 @@ const cfg = mkdtempSync(path.join(os.tmpdir(), 'bxr-'));
 const app = await electron.launch({
   executablePath: ELECTRON,
   args: [WALLET, '--serve-static', ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-gpu'] : [])],
-  env: { ...process.env, BOLTXR_USER_DATA_DIR: cfg, XDG_CONFIG_HOME: cfg, BOLTXR_QUAI_RPC_MAINNET: 'http://127.0.0.1:8549/cyprus1' },
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, BOLTXR_USER_DATA_DIR: cfg, XDG_CONFIG_HOME: cfg, BOLTXR_QUAI_RPC_MAINNET: 'http://127.0.0.1:8549/cyprus1' },
   timeout: 60000,
 });
 
@@ -107,10 +107,53 @@ try {
   await dapp.waitForFunction(() => window.__frame !== undefined, null, { timeout: 15000 });
   check('The game iframe (other origin) gets no provider', (await dapp.evaluate(() => window.__frame)) === false);
   await win.screenshot({ path: `${SHOTS}/02-beam-page.png` });
+  const capture = await win.evaluate(() => window.boltxrDesktop.browser.capture());
+  check('Spatial browser receives a live Chromium page capture', capture?.dataUrl.startsWith('data:image/jpeg;base64,') && capture.dataUrl.length > 1000 && capture.width > 0 && capture.height > 0, capture ? `${capture.width}×${capture.height}` : 'no capture');
 
-  // ── Not connected yet ──
-  await dapp.click('#accounts');
-  check('quai_accounts is empty before connecting', JSON.stringify((await lastLog('accounts')).result) === '[]');
+  // ── Multi-tab isolation, WebXR, and privacy controls ──
+  const xrApi = await dapp.evaluate(() => ({ available: !!navigator.xr, requestSession: typeof navigator.xr?.requestSession === 'function' }));
+  check('WebXR game API is available in the Chromium tab', xrApi.available && xrApi.requestSession, JSON.stringify(xrApi));
+  await win.getByTestId('new-tab').click();
+  await addressBar.fill('localhost:5290');
+  await addressBar.press('Enter');
+  const second = await app.context().waitForEvent('page', { timeout: 15000 }).catch(() => null) || app.context().pages().find(p => p.url().startsWith('http://localhost:5290'));
+  check('New tab opens a second Chromium page', !!second && (await win.locator('[data-testid^="browser-tab-"]').count()) === 2);
+  const isolated = await app.evaluate(({ BrowserWindow }) => {
+    const views = BrowserWindow.getAllWindows()[0].contentView.children.filter(c => c.webContents);
+    return views.length === 2 && views[0].webContents.session !== views[1].webContents.session;
+  });
+  check('Tabs use separate cookie and storage sessions', isolated);
+  await second.waitForFunction(() => document.cookie.includes('firstParty=seed'));
+  check('First-party cookies still work in an isolated tab', (await second.evaluate(() => document.cookie)).includes('firstParty=seed'));
+  await win.getByTestId('browser-tab-1').click();
+  await dapp.waitForFunction(() => window.__state && 'detected' in window.__state);
+  check('Switching tabs preserves the original game session', dapp.url().includes('localhost:5280'));
+  const crossSiteCookie = await dapp.evaluate(async () => {
+    const response = await fetch('http://127.0.0.1:5290/cookie-echo', { credentials: 'include' });
+    return response.json();
+  });
+  check('Cross-site requests do not leak cookies', crossSiteCookie.cookie === '' && servers.seen.cookieRequests.at(-1)?.cookie === '', JSON.stringify(crossSiteCookie));
+  await win.getByTestId('browser-tab-2').click();
+  const storedCookies = await second.evaluate(() => document.cookie);
+  check('Cross-site responses cannot store cookies', storedCookies.includes('firstParty=seed') && !storedCookies.includes('crossSite=blocked'), storedCookies);
+  await win.getByTestId('browser-tab-2').locator('..').getByRole('button', { name: /^Close/ }).click();
+  check('Closing a tab returns to one isolated tab', (await win.locator('[data-testid^="browser-tab-"]').count()) === 1);
+  await win.getByLabel('Bolt Shield privacy controls').click();
+  const trackerSwitch = win.getByTestId('shield-toggle-trackers');
+  await trackerSwitch.click();
+  const trackerOff = (await trackerSwitch.getAttribute('aria-checked')) === 'false';
+  await trackerSwitch.click();
+  const trackerOn = (await trackerSwitch.getAttribute('aria-checked')) === 'true';
+  check('Tracker shield toggles apply to the active tab', trackerOff && trackerOn);
+  await win.getByLabel('Close privacy controls').click();
+
+  // ── Not connected yet, using the spatial panel's normalized click path ──
+  const clickPoint = await dapp.locator('#accounts').evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: (rect.left + rect.width / 2) / innerWidth, y: (rect.top + rect.height / 2) / innerHeight };
+  });
+  await win.evaluate((point) => window.boltxrDesktop.browser.input({ type: 'click', ...point }), clickPoint);
+  check('Spatial normalized input clicks the Chromium page', JSON.stringify((await lastLog('accounts')).result) === '[]');
 
   // ── Connect ──
   check('Page view is shown before any request', (await viewVisible()) === true);
@@ -192,7 +235,7 @@ try {
   await win.screenshot({ path: `${SHOTS}/06-domain-warning.png` });
   await footerButton('Reject').click();
   const rej = await lastLog('sign-foreign');
-  check('Rejecting returns EIP-1193 4001 to the page', !rej.ok && (rej.error.code === 'ACTION_REJECTED' || rej.error.code === 4001 || /declined|rejected/i.test(rej.error.message)), JSON.stringify(rej.error));
+  check('Rejecting returns EIP-1193 user rejection to the page', !rej.ok && (rej.error.code === 'ACTION_REJECTED' || rej.error.code === 'user-rejected' || rej.error.code === 4001 || /declined|rejected|cancelled/i.test(rej.error.message)), JSON.stringify(rej.error));
 
   // ── Refused and proxied methods ──
   await dapp.click('#eth-sign');
@@ -326,6 +369,18 @@ try {
   await win.getByRole('button', { name: /^Resume/ }).click();
   await dapp.click('#accounts');
   check('After Disconnect, quai_accounts is empty', JSON.stringify((await lastLog('accounts')).result) === '[]');
+
+  // ── Spatial WEB uses the same tab offscreen, after the desktop view is hidden ──
+  await win.evaluate(() => window.boltxrDesktop.browser.layout({ visible: false, bounds: { x: 0, y: 0, width: 0, height: 0 } }));
+  const offscreen = await win.evaluate(() => window.boltxrDesktop.browser.capture());
+  check('Hiding the native view preserves the spatial capture surface', offscreen?.dataUrl.startsWith('data:image/jpeg;base64,') && offscreen.dataUrl.length > 1000 && offscreen.width > 0 && offscreen.height > 0, offscreen ? `${offscreen.width}×${offscreen.height}` : 'no capture');
+  await clearLog();
+  const offscreenPoint = await dapp.locator('#accounts').evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: (rect.left + rect.width / 2) / innerWidth, y: (rect.top + rect.height / 2) / innerHeight };
+  });
+  await win.evaluate((point) => window.boltxrDesktop.browser.input({ type: 'click', ...point }), offscreenPoint);
+  check('Spatial input works while the native Chromium view is hidden', JSON.stringify((await lastLog('accounts')).result) === '[]');
 } catch (e) {
   console.log('ERROR', e.message);
   results.push({ name: 'run completed', ok: false, detail: e.message });

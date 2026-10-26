@@ -8,13 +8,14 @@ import { Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import Button3D, { XR_THEME } from './Button3D';
 import { formatUsd } from '@/lib/format';
 
-export type WatchView = 'home' | 'pay' | 'swap' | 'farm' | 'scan';
+export type WatchView = 'home' | 'pay' | 'swap' | 'farm' | 'scan' | 'web';
 
 interface WristWatchProps {
   open: boolean;
   active: WatchView;
   locked: boolean;
   totalUsd: number | null;
+  pendingApprovals?: number;
   onToggle: () => void;
   onSelect: (view: WatchView) => void;
 }
@@ -25,6 +26,7 @@ const NAV: Array<{ id: WatchView; label: string; color: string }> = [
   { id: 'swap', label: 'SWAP', color: '#7c3aed' },
   { id: 'farm', label: 'FARM', color: '#059669' },
   { id: 'scan', label: 'SCAN', color: '#0891b2' },
+  { id: 'web', label: 'WEB', color: '#155e75' },
 ];
 
 const materials = {
@@ -56,7 +58,7 @@ function Strap({ side }: { side: 1 | -1 }) {
   );
 }
 
-export default function WristWatch({ open, active, locked, totalUsd, onToggle, onSelect }: WristWatchProps) {
+export default function WristWatch({ open, active, locked, totalUsd, pendingApprovals = 0, onToggle, onSelect }: WristWatchProps) {
   const root = useRef<Group>(null);
   const crown = useRef<Group>(null);
   const glow = useRef<MeshStandardMaterial>(null);
@@ -160,10 +162,10 @@ export default function WristWatch({ open, active, locked, totalUsd, onToggle, o
               return (
                 <Button3D
                   key={item.id}
-                  label={selected ? `• ${item.label}` : item.label}
+                  label={item.id === 'web' && pendingApprovals ? `SIGN ${pendingApprovals}` : selected ? `• ${item.label}` : item.label}
                   onPress={() => onSelect(item.id)}
-                  position={i === 4 ? [0, -0.48, 0] : [(column - 0.5) * 0.57, 0.3 - row * 0.3, 0]}
-                  width={i === 4 ? 1.02 : 0.51}
+                  position={[(column - 0.5) * 0.57, 0.3 - row * 0.3, 0]}
+                  width={0.51}
                   height={0.23}
                   fontSize={0.052}
                   color={selected ? '#e2e8f0' : item.color}

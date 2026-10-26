@@ -2,7 +2,7 @@ const { app, BrowserWindow, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveStaticFile, mimeFor } = require('./static-files');
-const { attachGameBrowser } = require('./game-browser');
+const { attachGameBrowser } = require('./chromium-browser');
 
 /*
  * The Next.js static export references assets by absolute path (/_next/...),
@@ -14,6 +14,11 @@ const SCHEME = 'app';
 const HOST = 'bolt';
 const APP_ORIGIN = `${SCHEME}://${HOST}`;
 const OUT_DIR = path.join(__dirname, '..', 'out');
+
+// Chromium selects the installed OpenXR / platform XR runtime at session start.
+// The browser still works without a headset; navigator.xr reports availability.
+app.commandLine.appendSwitch('enable-webxr');
+app.commandLine.appendSwitch('enable-features', 'WebXR,WebXRIncubations');
 
 // `electron .` during development loads the Next dev server; pass
 // --serve-static (or package the app) to load the exported build instead.

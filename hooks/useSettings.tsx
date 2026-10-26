@@ -9,6 +9,10 @@ interface PersistedSettings {
   modelComplexity: 0 | 1;
   hapticsEnabled: boolean;
   lovenseToken: string;
+  /** Iced-Out XR watch edition worn in XR (1–150); 0 = the classic Wrist OS watch. */
+  watchEdition: number;
+  /** Calm gems: softer sparkle and no celebration strobe. */
+  watchCalm: boolean;
 }
 
 interface SettingsContextType extends PersistedSettings {
@@ -18,6 +22,8 @@ interface SettingsContextType extends PersistedSettings {
   setShowSettings: (val: boolean) => void;
   setHapticsEnabled: (val: boolean) => void;
   setLovenseToken: (val: string) => void;
+  setWatchEdition: (val: number) => void;
+  setWatchCalm: (val: boolean) => void;
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -25,6 +31,8 @@ const DEFAULTS: PersistedSettings = {
   modelComplexity: 1,
   hapticsEnabled: false,
   lovenseToken: '',
+  watchEdition: 1,
+  watchCalm: false,
 };
 
 // Storage keys are kept from earlier releases so existing preferences survive.
@@ -33,6 +41,8 @@ const KEYS: Record<keyof PersistedSettings, string> = {
   modelComplexity: 'bolt_model_complexity',
   hapticsEnabled: 'HAPTICS_ENABLED',
   lovenseToken: 'LOVENSE_TOKEN',
+  watchEdition: 'bolt_watch_edition',
+  watchCalm: 'bolt_watch_calm',
 };
 
 const safeGet = (key: string): string | null => {
@@ -47,11 +57,15 @@ const readSettings = (): PersistedSettings => {
   const stack = safeGet(KEYS.activeStack);
   const complexity = safeGet(KEYS.modelComplexity);
   const haptics = safeGet(KEYS.hapticsEnabled);
+  const edition = Number(safeGet(KEYS.watchEdition));
+  const calm = safeGet(KEYS.watchCalm);
   return {
     activeStack: stack === '2D' || stack === 'XR' ? stack : DEFAULTS.activeStack,
     modelComplexity: complexity === '0' ? 0 : complexity === '1' ? 1 : DEFAULTS.modelComplexity,
     hapticsEnabled: haptics === null ? DEFAULTS.hapticsEnabled : haptics === 'true',
     lovenseToken: safeGet(KEYS.lovenseToken) ?? DEFAULTS.lovenseToken,
+    watchEdition: safeGet(KEYS.watchEdition) !== null && Number.isInteger(edition) && edition >= 0 && edition <= 150 ? edition : DEFAULTS.watchEdition,
+    watchCalm: calm === null ? DEFAULTS.watchCalm : calm === 'true',
   };
 };
 
@@ -100,6 +114,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const setModelComplexity = useCallback((val: 0 | 1) => update('modelComplexity', val), []);
   const setHapticsEnabled = useCallback((val: boolean) => update('hapticsEnabled', val), []);
   const setLovenseToken = useCallback((val: string) => update('lovenseToken', val), []);
+  const setWatchEdition = useCallback((val: number) => update('watchEdition', val), []);
+  const setWatchCalm = useCallback((val: boolean) => update('watchCalm', val), []);
 
   return (
     <SettingsContext.Provider value={{
@@ -110,6 +126,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       setShowSettings,
       setHapticsEnabled,
       setLovenseToken,
+      setWatchEdition,
+      setWatchCalm,
     }}>
       {children}
     </SettingsContext.Provider>

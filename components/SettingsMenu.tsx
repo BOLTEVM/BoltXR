@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useSyncExternalStore } from 'react';
-import { Settings, Cpu, Layers, Zap, Link, ShieldCheck, Lock, Eye, Box, Hand } from 'lucide-react';
+import { Settings, Cpu, Layers, Zap, Link, ShieldCheck, Lock, Eye, Box, Hand, Watch, Gem } from 'lucide-react';
 import Dialog from './ui/Dialog';
 import PinEntry from './ui/PinEntry';
 import { useSettings, AppStack } from '../hooks/useSettings';
 import { useWallet } from '../hooks/useWallet';
 import { lovense } from '../lib/lovense';
 import { APP_VERSION } from '../lib/app-info';
+import WatchOwnershipSettings from './mint/WatchOwnershipSettings';
 
 const STACKS: { id: AppStack; label: string; desc: string; icon: typeof Box }[] = [
   { id: 'XR', label: 'Spatial XR', desc: 'WebXR · VR / AR / desktop 3D', icon: Box },
@@ -90,7 +91,9 @@ const SettingsMenu: React.FC = () => {
     hapticsEnabled,
     setHapticsEnabled,
     lovenseToken,
-    setLovenseToken
+    setLovenseToken,
+    watchCalm,
+    setWatchCalm,
   } = useSettings();
   const wallet = useWallet();
   const lovenseConnected = useSyncExternalStore(subscribeLovense, getLovenseConnected, getLovenseServer);
@@ -129,8 +132,32 @@ const SettingsMenu: React.FC = () => {
             })}
           </div>
           <p className="text-[11px] text-slate-500 mt-3 leading-relaxed">
-            Spatial XR starts a WebXR session when you choose VR or AR — make sure your headset is connected and WebXR is enabled in your browser.
+            Spatial XR starts a WebXR session when you choose VR or Passthrough — make sure your headset is connected and WebXR is enabled in your browser. In Passthrough you see your room; switch to a virtual sky from the watch menu at any time.
           </p>
+        </section>
+
+        {/* WRIST WATCH */}
+        <section>
+          <div className="section-title"><Watch size={14} /> Wrist watch</div>
+          <div className="card p-4 flex flex-col gap-4">
+            <WatchOwnershipSettings />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm font-bold flex items-center gap-2"><Gem size={14} className="text-purple-400" /> Calm gems</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Softer sparkle, no celebration flashes</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={watchCalm}
+                aria-label="Calm gems"
+                onClick={() => setWatchCalm(!watchCalm)}
+                className={`relative h-6 w-11 rounded-full transition-colors ${watchCalm ? 'bg-purple-500' : 'bg-white/15'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${watchCalm ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* SECURITY */}

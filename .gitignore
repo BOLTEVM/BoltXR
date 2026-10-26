@@ -49,3 +49,40 @@ next-env.d.ts
 
 # game browser e2e output
 /e2e/.out/
+
+# Iced-Out XR mint art and holder data: never served from GitHub (this repo is public).
+#   The public token art (stills, thumbnails, token metadata) goes to Arweave with
+#   scripts/mint/upload-arweave.mjs; the 3D watches (GLB) are for holders and are never
+#   uploaded anywhere public. lib/watch/editions.ts (generated from 150Watches/manifest.json)
+#   stays committed, so the build does not need this folder.
+/150Watches/
+/public/watches/
+
+# Arweave / Turbo signing keys (pay for uploads; keep them out of the repo)
+*.jwk
+*.jwk.json
+arweave-wallet*.json
+arweave-keyfile*.json
+/.arweave/
+
+# local GPU driver caches written next to the project
+/NVIDIA Corporation/
+
+# The Iced-Out XR watch module: a separate PRIVATE repository, checked out here (see README).
+# Never commit it to this public repository. The paths after it are where the watch code lived
+# before it moved there; they stay ignored so a stale copy cannot be committed by accident.
+/private/
+/_to_delete/
+/lib/watch/
+/lib/destruct/
+/lib/mint/watchStage.ts
+/components/xr/IcedWristWatch.tsx
+/scripts/build-watch-editions.mjs
+/scripts/sync-destruct.mjs
+/scripts/mint/arweave.mjs
+/scripts/mint/upload-arweave.mjs
+/scripts/mint/prepare-metadata.mjs
+/tests/mint/arweave.test.ts
+
+# local UI test-run output (screenshots and server logs of a wallet session)
+/artifacts/

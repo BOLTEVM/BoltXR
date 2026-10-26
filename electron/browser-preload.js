@@ -15,6 +15,14 @@
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
+// DevTools-injected keys do not reach Electron's before-input-event. Keep an
+// isolated-world Escape path too; page overrides cannot replace this document.
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !document.fullscreenElement) return;
+  event.preventDefault();
+  document.exitFullscreen().catch(() => undefined);
+}, true);
+
 const listeners = new Set();
 ipcRenderer.on('dapp:event', (_event, message) => {
   if (!message || typeof message.event !== 'string') return;
@@ -149,6 +157,28 @@ function installProvider(request, subscribe) {
     },
   };
   Object.freeze(provider);
+
+  // Keep WebXR games fully usable, but return control to the wallet before an
+  // approval. Sessions are tracked only in this page; no page can affect another.
+  try {
+    if (navigator.xr) {
+      const xrSessions = new Set();
+      const requestSession = navigator.xr.requestSession.bind(navigator.xr);
+      Object.defineProperty(navigator.xr, 'requestSession', {
+        configurable: true,
+        value: async (...args) => {
+          const session = await requestSession(...args);
+          xrSessions.add(session);
+          session.addEventListener('end', () => xrSessions.delete(session), { once: true });
+          return session;
+        },
+      });
+      window.addEventListener('boltxr:end-xr', () => {
+        for (const session of [...xrSessions]) session.end().catch(() => undefined);
+        xrSessions.clear();
+      });
+    }
+  } catch { /* Older runtimes can still play; they may not expose this hook. */ }
 
   for (const name of ['pelagus', 'quai']) {
     try {

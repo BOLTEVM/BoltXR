@@ -14,7 +14,7 @@ export const PASS = '0x002b2596EcF05C93a31ff916E8b456DF6C77c750';
 const PASS_IFACE = new Interface(['function claimEarned(uint256 nonce, uint256 deadline, bytes signature)']);
 
 export function startServers({ nodePort, beamPort, framePort, bundlePath }) {
-  const seen = { methods: [], rawTxs: [], decoded: [], sessions: [], errors: [] };
+  const seen = { methods: [], rawTxs: [], decoded: [], sessions: [], cookieRequests: [], errors: [] };
   const receipts = new Map();
   let nonce = 0;
   let block = 1000;
@@ -121,8 +121,17 @@ export function startServers({ nodePort, beamPort, framePort, bundlePath }) {
     });
   });
 
-  const frame = http.createServer((_req, res) => {
+  const frame = http.createServer((req, res) => {
+    if (req.url === '/cookie-echo') {
+      seen.cookieRequests.push({ cookie: req.headers.cookie || '', origin: req.headers.origin || '' });
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('access-control-allow-origin', `http://localhost:${beamPort}`);
+      res.setHeader('access-control-allow-credentials', 'true');
+      res.setHeader('set-cookie', 'crossSite=blocked; Path=/; SameSite=None; Secure');
+      return res.end(JSON.stringify({ cookie: req.headers.cookie || '' }));
+    }
     res.setHeader('content-type', 'text/html');
+    res.setHeader('set-cookie', 'firstParty=seed; Path=/; SameSite=None; Secure');
     res.end(`<!doctype html><body style="color:#94a3b8;font:12px monospace">game iframe · pelagus in frame: <span id="r"></span><script>
       document.getElementById('r').textContent = String(typeof window.pelagus);
       parent.postMessage({ frameHasPelagus: typeof window.pelagus !== 'undefined' }, '*');</script></body>`);
