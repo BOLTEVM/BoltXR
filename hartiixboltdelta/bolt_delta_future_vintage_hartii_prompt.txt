@@ -1,0 +1,19 @@
+# ==============================================================================
+# BOLT DELTA 'FUTURE VINTAGE' x HARTII LABS (1-OF-1 COLLABORATION)
+# MASTER CONCEPT ART & CINEMATIC HOROLOGY PROMPT SUITE
+# ==============================================================================
+
+# Primary Reference Photo: VintageBoltdelta.jpg (896x1120 | PG-04 StdDev: 0.1721)
+# Aesthetic Paradigm: 'Future Vintage' — 1970s Haute Horlogerie fused with Live Blockchain Telemetry
+
+---
+[PROMPT 1: FLAGSHIP EDITORIAL DESK STILL LIFE — VINTAGE RALLY & AMBER BLOCK DISPLAY]
+Masterpiece editorial macro product photograph of the 1-of-1 'Bolt Delta Future Vintage' luxury mechanical wristwatch, a collaboration between Hartii Labs and BOLTEVM. Cushion-shaped 38.5mm brushed 316L stainless steel case with polished chamfered bevel edges and a knurled vintage winding crown at 3 o'clock. Stepped high-polish bezel surrounding an ultra-high domed box sapphire crystal with authentic optical edge distortion. Warm matte champagne-eggshell grained sector dial with fine intersecting crosshair lines and applied patinated brass rectangular hour batons filled with aged radium lume. Thermally heat-blued syringe hands and an ultra-thin blued needle second hand. At the 6 o'clock position, an illuminated rectangular brass-framed digital aperture displays a glowing warm amber dot-matrix micro-screen with sharp digital text reading 'BLOCK 10,812,345' on top and 'DIFF 1.24 T' below. Fitted to a vintage saddle-brown perforated rally leather racing strap with large circular cutouts, micro-ventilation punches, and cream contrast perimeter saddle stitching. Resting on a dark rich mahogany timber desk alongside a turned solid brass coin valet tray, a worn dark leather notebook journal, and a black lacquer fountain pen with gold trim. Warm raking studio window light, subtle depth of field, tactile leather grain, metal micro-scratches, crisp reflections, Hasselblad H6D-100c medium format, 8k resolution, photorealistic horology catalog.
+
+---
+[PROMPT 2: ORTHOGONAL FRONT DIAL MACRO — PHOTO FORGE & UV REMAP STANDARD]
+Symmetrical top-down orthogonal macro photograph of the Bolt Delta Future Vintage watch dial, Hartii Labs 1-of-1 edition. Dead-center frontal angle perfectly aligned with the vertical 12-to-6 axis. Ultra-clear box sapphire crystal revealing the warm cream granular texture of the sector dial. Distinct crosshair quadrant lines in matte charcoal ink, dual perimeter railroad minute tracks, applied patinated bronze hour markers with aged lume. Vivid cobalt blued-steel syringe hands caught in bright studio key light. Recessed display window at 6 o'clock glowing with phosphor-amber digital characters 'BLOCK 10,812,345' and 'DIFF 1.24 T'. Brushed steel lug flanks framing the top and bottom perforated cognac rally leather strap. Pure neutral black studio horology background, razor-sharp focus from bezel to pin, calibrated diffuse lighting, zero glare on indices, 8k, Octane render, luxury watchmaker blueprint.
+
+---
+[PROMPT 3: FIRST-PERSON XR HAND-TRACKING WRIST PERSPECTIVE — SPATIAL NODE INTERFACE]
+Cinematic first-person perspective of a tailored wrist wearing the Bolt Delta Future Vintage watch by Hartii Labs. The watch is worn against a crisp off-white linen shirt cuff and charcoal herringbone wool sleeve. Mid-air above the domed sapphire crystal, subtle translucent volumetric XR holographic rings and golden data ribbons project upward via spatial hand-tracking gesture recognition, displaying live mempool pending transactions and decentralized validator signatures. The amber dot-matrix display on the watch face pulses softly, synchronized with the user's biometric pulse detected through the caseback. Natural daylight filtering through an architectural glass window, soft filmic bokeh, extreme macro skin texture, leather strap perforations, photorealistic Unreal Engine 5, 8k render.

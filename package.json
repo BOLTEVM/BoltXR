@@ -5,6 +5,8 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:quest": "node scripts/dev.mjs --quest",
+    "dev:quest:usb": "node scripts/dev.mjs --usb",
     "build": "npm run vendor && next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -13,6 +15,7 @@
     "vendor": "node scripts/copy-vendor-assets.mjs",
     "electron:preview": "npm run build && electron . --serve-static",
     "test:browser": "node scripts/test-browser-policy.mjs",
+    "test:quest": "node scripts/test-dev-quest.mjs",
     "test:e2e": "node e2e/run.mjs"
   },
   "build": {
@@ -104,6 +107,7 @@
     "eslint-config-next": "16.1.0",
     "iwer": "^2.2.1",
     "playwright": "1.49.1",
+    "selfsigned": "^5.5.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

@@ -1,0 +1,59 @@
+{
+  "token_id": 1,
+  "name": "Bolt Delta Future Vintage \u2014 Hartii Labs (1 of 1)",
+  "symbol": "BOLTDELTA",
+  "edition": "1 of 1 Unique Masterpiece",
+  "description": "The 1-of-1 Bolt Delta Future Vintage luxury mechanical chronometer and hardware node wallet, created in collaboration with Hartii Labs. Merges 1970s motorsport rally horology with live Layer-1 blockchain block height and difficulty telemetry.",
+  "image": "VintageBoltdelta.jpg",
+  "external_url": "https://wallet.boltevm.io/hartiixboltdelta/001",
+  "attributes": [
+    {
+      "trait_type": "Collaboration",
+      "value": "Hartii Labs x Bolt Delta"
+    },
+    {
+      "trait_type": "Edition Type",
+      "value": "1 of 1 Masterpiece"
+    },
+    {
+      "trait_type": "Case Shape",
+      "value": "38.5mm Cushion / C-Shape"
+    },
+    {
+      "trait_type": "Case Material",
+      "value": "316L Brushed Stainless Steel"
+    },
+    {
+      "trait_type": "Crystal",
+      "value": "Ultra-High Domed Box Sapphire"
+    },
+    {
+      "trait_type": "Dial Style",
+      "value": "Champagne Crosshair Sector Dial"
+    },
+    {
+      "trait_type": "Hands",
+      "value": "Thermally Heat-Blued Syringe Hands"
+    },
+    {
+      "trait_type": "Telemetry Complication",
+      "value": "Amber Dot-Matrix Block Height & Difficulty"
+    },
+    {
+      "trait_type": "Strap",
+      "value": "Perforated Cognac Italian Rally Leather"
+    },
+    {
+      "trait_type": "Hardware Security",
+      "value": "EAL6+ Secure Enclave"
+    },
+    {
+      "trait_type": "Power Architecture",
+      "value": "Kinetic Mainspring + Micro-Piezo Supercapacitor"
+    },
+    {
+      "trait_type": "Rarity Score",
+      "value": "Mythic 1-of-1"
+    }
+  ]
+}

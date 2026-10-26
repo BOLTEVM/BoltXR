@@ -2,16 +2,14 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { XR, createXRStore } from '@react-three/xr';
-import { Settings, Gamepad2, Home, WalletCards, ArrowLeftRight, Sprout, ScanLine } from 'lucide-react';
+import { XR } from '@react-three/xr';
+import { Settings, Gamepad2, Home, WalletCards, ArrowLeftRight, Sprout, ScanLine, Globe2 } from 'lucide-react';
 import { ACESFilmicToneMapping } from 'three';
 import { useSettings } from '@/hooks/useSettings';
 import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
 import '@/lib/xr-text';
+import { xrStore, startSession } from '@/lib/xr/session';
 import Scene from './Scene';
-
-// The app installs its own flag-gated emulator (lib/xr-emulation); disable the library's localhost auto-emulation.
-const store = createXRStore({ emulate: false });
 
 type NavigatorWithXR = Navigator & {
     xr?: {
@@ -97,16 +95,17 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
 
                 <div className="flex gap-3">
                     <button
-                        onClick={() => store.enterAR()}
+                        onClick={() => startSession(xrSupport, 'passthrough')}
                         disabled={!xrSupport.ar}
-                        className={`font-bold py-3 px-4 rounded-xl text-sm transition-all active:scale-95 flex-1 border border-white/10 ${
+                        title="See your room while you use the wallet (switch to a virtual sky from the watch at any time)"
+                        className={`font-bold py-3 px-2 rounded-xl text-sm transition-all active:scale-95 flex-1 border border-white/10 ${
                             xrSupport.ar ? "bg-white/10 hover:bg-white/20 text-white" : "bg-white/5 text-gray-600 cursor-not-allowed"
                         }`}
                     >
-                        {xrSupport.ar ? "AR" : "AR N/A"}
+                        {xrSupport.ar ? "Passthrough" : "Passthrough N/A"}
                     </button>
                     <button
-                        onClick={() => store.enterVR()}
+                        onClick={() => startSession(xrSupport, 'vr')}
                         disabled={!xrSupport.vr}
                         className={`font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-lg active:scale-95 flex-1 ${
                             xrSupport.vr 
@@ -144,6 +143,7 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
                     ['swap', 'Swap', ArrowLeftRight],
                     ['farm', 'Farm', Sprout],
                     ['scan', 'Scan', ScanLine],
+                    ['web', 'Web', Globe2],
                 ] as const).map(([view, label, Icon]) => (
                     <button
                         key={view}
@@ -186,7 +186,7 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
                     gl.domElement.addEventListener('webglcontextrestored', () => setContextLost(false));
                 }}
             >
-                <XR store={store}>
+                <XR store={xrStore}>
                     {/* Keep the DOM controls usable while 3D fonts/assets load. */}
                     <Suspense fallback={null}>
                         <Scene />

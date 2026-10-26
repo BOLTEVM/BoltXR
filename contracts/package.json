@@ -1,0 +1,13 @@
+{
+  "name": "iced-out-xr-contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "hardhat build",
+    "test": "hardhat test solidity",
+    "chain": "hardhat node",
+    "local": "hardhat run scripts/local.ts --network localhost",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network mainnet --build-profile production",
+    "owner": "hardhat run scripts/owner.ts"
+  }
+}

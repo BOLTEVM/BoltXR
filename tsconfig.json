@@ -20,6 +20,7 @@
       }
     ],
     "paths": {
+      "@iced-out/watch": ["./private/iced-out/index.ts"],
       "@/*": ["./*"]
     }
   },
@@ -31,5 +32,9 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "e2e"]
+  "exclude": [
+    "node_modules", "e2e", "contracts", "tests",
+    "private/iced-out/server", "private/iced-out/scripts", "private/iced-out/tests", "private/iced-out/node_modules",
+    "_to_delete", "lib/watch", "lib/destruct", "lib/mint/watchStage.ts", "components/xr/IcedWristWatch.tsx"
+  ]
 }

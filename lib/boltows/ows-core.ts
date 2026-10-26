@@ -520,6 +520,20 @@ export class BoltwalletCore {
     return signature;
   }
 
+  /**
+   * EIP-191 personal_sign with the wallet's Ethereum key (the address shown for Ethereum).
+   * Used to prove the vault holds an Iced-Out XR watch to the holder download server; the text
+   * is built by the wallet (lib/mint/holderDownload.ts), not taken from a site.
+   */
+  async signEvmMessage(walletId: string, message: string): Promise<string> {
+    const { mnemonic, wallet } = await unlockedWallet(walletId);
+    touchSession();
+    const signer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, derivationPathFor('ethereum', wallet.index), englishWordlist);
+    const signature = await signer.signMessage(message);
+    logEvent('security', 'Ethereum message signed', 'success');
+    return signature;
+  }
+
   /** Sign and broadcast a Quai transaction, recording it in history. */
   async sendQuaiTransaction(walletId: string, chainKey: string, tx: QuaiTxRequest): Promise<string> {
     const network = requireQuaiNetwork(chainKey);
