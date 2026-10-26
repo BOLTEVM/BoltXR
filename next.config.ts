@@ -25,7 +25,7 @@ const lanHosts = Object.values(os.networkInterfaces()).flat()
 
 const nextConfig: NextConfig = {
   output: 'export',
-  allowedDevOrigins: [...lanHosts, "*.local"],
+  allowedDevOrigins: [...lanHosts, "127.0.0.1", "::1", "*.local"],
   outputFileTracingRoot: __dirname,
   images: {
     unoptimized: true,

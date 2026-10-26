@@ -95,8 +95,11 @@ export default function QRScannerPanel({ chainKey, onAddress, onClose }: {
     }
   }
 
-  const scannedChain = result?.payload.type === 'address' ? resolveChainKey(result.payload.chainId) || chainKey : chainKey;
-  const valid = result?.payload.type === 'address' && validateAddress(result.payload.address, scannedChain);
+  const scannedChainId = result?.payload.type === 'address' ? result.payload.chainId : undefined;
+  const resolvedChain = resolveChainKey(scannedChainId);
+  const scannedChain = resolvedChain || chainKey;
+  const knownNetwork = !scannedChainId || resolvedChain !== null;
+  const valid = result?.payload.type === 'address' && knownNetwork && validateAddress(result.payload.address, scannedChain);
   const restart = () => {
     reset();
     setResult(null);
@@ -148,7 +151,9 @@ export default function QRScannerPanel({ chainKey, onAddress, onClose }: {
               {valid ? 'ADDRESS VERIFIED' : 'ADDRESS / NETWORK MISMATCH'}
             </Text>
             <Text position={[0, 0.36, 0.02]} fontSize={0.042} color="#e2e8f0" anchorX="center">{truncateAddress(result.payload.address, 12, 10)}</Text>
-            <Text position={[0, 0.2, 0.02]} fontSize={0.035} color={XR_THEME.muted} anchorX="center">{scannedChain.toUpperCase()}</Text>
+            <Text position={[0, 0.2, 0.02]} fontSize={0.035} color={knownNetwork ? XR_THEME.muted : '#fda4af'} anchorX="center">
+              {knownNetwork ? scannedChain.toUpperCase() : `UNSUPPORTED NETWORK ${scannedChainId}`}
+            </Text>
           </group>
         )}
         {result?.payload.type === 'contract' && (

@@ -18,8 +18,8 @@ Use a dedicated test vault with small amounts. Do not record recovery phrases, p
 ## 1. Setup and browser security
 
 - [ ] Serve the release candidate over HTTPS, or use the packaged app's trusted application origin.
-      For a dev build: `pnpm dev:quest:usb` (USB, then `http://localhost:3000` on the headset) or
-      `pnpm dev:quest` (Wi-Fi, `https://<PC address>:3000`); see README, "Opening the dev server on a Meta Quest".
+      For a dev build, run the ordinary `pnpm dev`: USB opens `http://localhost:3000` on the headset;
+      Wi-Fi opens the printed `https://<PC address>:3001`. See README, "Opening the dev server on a Meta Quest".
 - [ ] Confirm native WebXR is available without desktop XR emulation flags.
 - [ ] Enter and exit immersive VR repeatedly; the scene resumes without a blank canvas or duplicate interface.
 - [ ] Confirm camera and clipboard permission prompts are understandable and only appear when needed.

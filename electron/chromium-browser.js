@@ -5,6 +5,7 @@
  */
 const { WebContentsView, ipcMain, session } = require('electron');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const policy = require('./browser-policy');
 const privacy = require('./privacy-policy');
 
@@ -69,7 +70,9 @@ class ChromiumBrowser {
       return null;
     }
     const id = this.nextTabId++;
-    const partition = `persist:boltxr-private-tab-${id}`;
+    // A unique in-memory partition keeps first-party state for this tab only.
+    // Nothing survives a crash or restart to be inherited by an unrelated site.
+    const partition = `boltxr-private-tab-${id}-${randomUUID()}`;
     const ses = session.fromPartition(partition);
     const tab = {
       id, partition, session: ses, view: null, fullscreen: false,

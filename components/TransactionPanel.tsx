@@ -36,6 +36,7 @@ export default function TransactionPanel({ token, onClose, onStartSwap, initialS
 
     const decimals = chain?.nativeCurrency.decimals ?? 18;
     const balanceKnown = token.status === 'success';
+    const recipientValid = validateAddress(recipient, token.chainKey);
 
     const acceptRecipient = useCallback((text: string) => {
         const candidate = text.trim();
@@ -112,7 +113,10 @@ export default function TransactionPanel({ token, onClose, onStartSwap, initialS
             await navigator.clipboard.writeText(token.address);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch { /* clipboard unavailable */ }
+        } catch {
+            setCopied(false);
+            setMessage({ text: 'CLIPBOARD BLOCKED — COPY THE ADDRESS MANUALLY', error: true });
+        }
     };
 
     const usd = token.usdPrice !== undefined && amount ? Number(amount) * token.usdPrice : null;
@@ -180,7 +184,7 @@ export default function TransactionPanel({ token, onClose, onStartSwap, initialS
                         <Button3D label="▣  PASTE ADDRESS" onPress={pasteFromClipboard} position={[0, 0.05, 0]} width={1.1} height={0.2} color={XR_THEME.brand} />
                         {onScanRequest && <Button3D label="⌗  SCAN RECIPIENT QR" onPress={() => onScanRequest(token.chainKey)} position={[0, -0.22, 0]} width={1.1} height={0.2} color="#0891b2" />}
                         <Button3D label="BACK" onPress={() => { setStep('overview'); setMessage(null); }} position={[-0.3, -0.9, 0]} width={0.5} height={0.16} />
-                        <Button3D label="NEXT" onPress={() => { setMessage(null); setStep('amount'); }} position={[0.3, -0.9, 0]} width={0.5} height={0.16} color={XR_THEME.info} disabled={!recipient} />
+                        <Button3D label="NEXT" onPress={() => { setMessage(null); setStep('amount'); }} position={[0.3, -0.9, 0]} width={0.5} height={0.16} color={XR_THEME.info} disabled={!recipientValid} />
                     </group>
                 )}
 

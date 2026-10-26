@@ -69,9 +69,10 @@ const syncAdb = () => {
   }
   for (const serial of reversed) if (!current.has(serial)) reversed.delete(serial);
 };
+let adbTimer = null;
 if (process.env.BOLTXR_DEV_NO_ADB !== '1') {
   syncAdb();
-  var adbTimer = setInterval(syncAdb, 2500);
+  adbTimer = setInterval(syncAdb, 2500);
   adbTimer.unref();
 }
 

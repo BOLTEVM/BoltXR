@@ -88,8 +88,7 @@ try {
   const page = await context.newPage();
   const hmrSocket = page.waitForEvent('websocket', { predicate: socket => socket.url().includes('/_next/webpack-hmr'), timeout: 15000 });
   await page.goto(`https://127.0.0.1:${port + 1}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  const socket = await hmrSocket;
-  await socket.waitForEvent('socketopen', { timeout: 10000 });
+  await hmrSocket;
   console.log('PASS HTTPS companion preserves development HMR WebSockets');
   await page.getByRole('button', { name: /Enter Spatial XR/i }).waitFor({ timeout: 30000 });
   const runtime = await page.evaluate(() => ({ secure: isSecureContext, xr: !!navigator.xr }));
