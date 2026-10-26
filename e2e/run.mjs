@@ -123,6 +123,11 @@ try {
     return views.length === 2 && views[0].webContents.session !== views[1].webContents.session;
   });
   check('Tabs use separate cookie and storage sessions', isolated);
+  const ephemeral = await app.evaluate(({ BrowserWindow }) => {
+    const views = BrowserWindow.getAllWindows()[0].contentView.children.filter(c => c.webContents);
+    return views.every(view => view.webContents.session.getStoragePath() === null);
+  });
+  check('Tab storage is ephemeral and cannot leak into a later app run', ephemeral);
   await second.waitForFunction(() => document.cookie.includes('firstParty=seed'));
   check('First-party cookies still work in an isolated tab', (await second.evaluate(() => document.cookie)).includes('firstParty=seed'));
   await win.getByTestId('browser-tab-1').click();
@@ -241,6 +246,16 @@ try {
   await dapp.click('#eth-sign');
   const es = await lastLog('eth-sign');
   check('eth_sign is refused (4200)', !es.ok && es.error.code === 4200, JSON.stringify(es.error));
+  const zeroTransfer = await dapp.evaluate(async () => {
+    try {
+      const result = await window.pelagus.request({ method: 'quai_sendTransaction', params: [{ to: '0x0000000000000000000000000000000000000000', value: '0x1' }] });
+      return { ok: true, result };
+    } catch (error) {
+      return { ok: false, code: error.code, message: error.message };
+    }
+  });
+  check('Zero-address transfers are refused before an approval', !zeroTransfer.ok && zeroTransfer.code === -32602, JSON.stringify(zeroTransfer));
+  if (await approval().isVisible().catch(() => false)) await footerButton('Reject').click();
   await dapp.click('#read');
   const rd = await lastLog('read');
   check('Reads are proxied to the Cyprus-1 node', rd.ok && /^0x[0-9a-f]+$/.test(rd.result) && servers.seen.methods.some((m) => m.method === 'quai_blockNumber' && m.path === '/cyprus1'));

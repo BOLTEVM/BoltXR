@@ -32,7 +32,7 @@ const cameraErrorMessage = (e: unknown) => {
 const QRPanel: React.FC<QRPanelProps> = ({
   isOpen, onClose, initialTab = 'receive', onAddressScanned, onContractScanned, onRequestUnlock,
 }) => {
-  const { addresses, tokens, status } = useWallet();
+  const { addresses, tokens, status, validateAddress } = useWallet();
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [chainKey, setChainKey] = useState('ethereum');
   const [qrDataUri, setQrDataUri] = useState<string | null>(null);
@@ -136,7 +136,12 @@ const QRPanel: React.FC<QRPanelProps> = ({
   }, [address]);
 
   const receiveChains = tokens.length ? tokens.map(t => t.chainKey) : Object.keys(addresses);
-  const scannedChainKey = scanResult?.payload.type === 'address' ? resolveChainKey(scanResult.payload.chainId) : null;
+  const scannedChainId = scanResult?.payload.type === 'address' ? scanResult.payload.chainId : undefined;
+  const scannedChainKey = resolveChainKey(scannedChainId);
+  const scannedChainCandidates = scannedChainKey ? [scannedChainKey] : Object.keys(CHAINS).filter(key => CHAINS[key].canSend);
+  const scannedSendChain = !scannedChainId || scannedChainKey
+    ? scannedChainCandidates.find(key => scanResult?.payload.type === 'address' && validateAddress(scanResult.payload.address, key)) || null
+    : null;
 
   return (
     <Dialog
@@ -235,17 +240,22 @@ const QRPanel: React.FC<QRPanelProps> = ({
                   </>
                 )}
               </div>
-              {scannedChainKey && CHAINS[scannedChainKey] && (
+              {scannedSendChain && CHAINS[scannedSendChain] && (
                 <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <TokenIcon symbol={CHAINS[scannedChainKey].nativeCurrency.symbol} color={CHAINS[scannedChainKey].color} size={20} />
-                  {CHAINS[scannedChainKey].name}
+                  <TokenIcon symbol={CHAINS[scannedSendChain].nativeCurrency.symbol} color={CHAINS[scannedSendChain].color} size={20} />
+                  {CHAINS[scannedSendChain].name}
                 </div>
+              )}
+              {scanResult.payload.type === 'address' && !scannedSendChain && (
+                <p className="text-xs text-red-400" role="alert">
+                  {scannedChainId && !scannedChainKey ? `Unsupported QR network: ${scannedChainId}` : 'This address is not valid for a supported send network.'}
+                </p>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" className="btn" onClick={restartScan}><RotateCcw size={14} /> Scan again</button>
                 {scanResult.payload.type === 'address' && onAddressScanned && (
-                  <button type="button" className="btn btn-primary" onClick={() => {
-                    if (scanResult.payload.type === 'address') onAddressScanned(scanResult.payload.address, scannedChainKey || undefined);
+                  <button type="button" className="btn btn-primary" disabled={!scannedSendChain} onClick={() => {
+                    if (scanResult.payload.type === 'address' && scannedSendChain) onAddressScanned(scanResult.payload.address, scannedSendChain);
                   }}>
                     <Send size={14} /> Send here
                   </button>

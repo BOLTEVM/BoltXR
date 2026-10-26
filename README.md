@@ -47,37 +47,37 @@ Camera availability depends on the headset browser, WebXR implementation, and us
 # Install dependencies (including non-EVM libraries)
 pnpm install
 
-# Start the development server (http://localhost:3000)
+# Start desktop localhost, Quest HTTPS, and automatic Quest USB setup
 pnpm dev
 ```
 
-`dev` and `build` first copy the MediaPipe hand-tracking model and runtime from
-`node_modules` into `public/vendor/` (see `scripts/copy-vendor-assets.mjs`), so hand
+Desktop and preview URLs remain `http://localhost:3000`. The same command also starts a local HTTPS
+companion on port 3001 for WebXR headsets and watches for USB-connected Quest devices. There is no
+separate headset startup command. `dev` and `build` first copy the MediaPipe hand-tracking model and
+runtime from `node_modules` into `public/vendor/` (see `scripts/copy-vendor-assets.mjs`), so hand
 tracking is served by the app itself — no CDN at runtime, and it works offline.
 
 ### Opening the dev server on a Meta Quest
-`http://localhost:3000` typed into the Quest browser points at the headset itself, not your PC,
-so the page never loads. WebXR also needs a secure page (`https://`, or `http://localhost`), so the
-PC's plain `http://192.168.x.x:3000` loads without VR. Use one of these:
+Run `pnpm dev` once, then use either connection below. The Quest's own `localhost` is not the PC, and
+WebXR needs a secure page (`https://`, or `http://localhost`), so the PC's plain LAN HTTP URL is not
+a headset WebXR endpoint.
 
 **USB cable (simplest, no certificate).** Turn on developer mode for the headset (Meta Horizon app →
 Devices → Developer mode), plug it in, accept *Allow USB debugging* inside the headset, and have
-`adb` on PATH (Android Platform Tools or Meta Quest Developer Hub). Then:
-```powershell
-adb devices          # the headset should be listed as "device"
-pnpm dev:quest:usb   # runs adb reverse tcp:3000 tcp:3000, then the dev server
-```
-Open `http://localhost:3000` in the Quest browser. Run `pnpm dev:quest:usb` again after re-plugging.
+`adb` on PATH (Android Platform Tools or Meta Quest Developer Hub). The normal `pnpm dev` command
+automatically maps the device and prints **Quest USB ready**. Open `http://localhost:3000` in the
+Quest browser. Re-plugging is detected automatically; no restart or second pnpm command is needed.
 
-**Wi-Fi.** Headset and PC on the same network:
-```powershell
-pnpm dev:quest       # HTTPS on all interfaces; prints https://<PC address>:3000
-```
-Open the printed `https://…:3000` address on the Quest, choose *Advanced → Proceed* on the
-certificate warning (the dev certificate is self-signed), and allow Node.js on **Private networks**
-if Windows Firewall asks. `next.config.ts` lists this PC's addresses in `allowedDevOrigins`, which
-Next 16 needs before it serves dev scripts to another device; restart the dev server after changing
-networks. If the page still does not load, check the Wi-Fi is set to Private in Windows, not Public.
+**Wi-Fi.** Keep the headset and PC on the same network. Open the printed `https://<PC address>:3001`
+address on the Quest, choose *Advanced → Proceed* on the certificate warning (the local development
+certificate is self-signed), and allow Node.js on **Private networks** if Windows Firewall asks.
+`next.config.ts` lists this PC's addresses in `allowedDevOrigins`, which Next 16 needs before it
+serves dev scripts to another device; restart the dev server after changing networks. If the page
+still does not load, check the Wi-Fi is set to Private in Windows, not Public.
+
+The legacy `pnpm dev:quest` and `pnpm dev:quest:usb` commands remain aliases, but are no longer
+required. Run `pnpm test:quest` to verify desktop HTTP, LAN HTTPS, HMR WebSockets, secure WebXR API
+availability, and automatic USB mapping with a simulated headset (no physical Quest required).
 
 ### Iced-Out XR watches (private module)
 The 150 Iced-Out XR watches — the NFT watches holders wear on the wrist — are minted on

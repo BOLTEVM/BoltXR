@@ -86,3 +86,6 @@ arweave-keyfile*.json
 
 # local UI test-run output (screenshots and server logs of a wallet session)
 /artifacts/
+/hartiixboltdelta/
+
+

@@ -272,6 +272,9 @@ export class DappHost {
     } catch (e) {
       throw new DappError(-32602, e instanceof Error ? e.message : 'Invalid recipient');
     }
+    if (to.toLowerCase() === '0x0000000000000000000000000000000000000000') {
+      throw new DappError(-32602, 'The zero address cannot receive funds');
+    }
     if (raw.chainId !== undefined && raw.chainId !== null && Number(parseQuantity(raw.chainId, 'chainId')) !== network.chainId) {
       throw new DappError(-32602, `This transaction is for another network; Bolt XR is on ${network.shortName}`);
     }

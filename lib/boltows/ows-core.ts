@@ -414,7 +414,6 @@ export class BoltwalletCore {
   async getHistory(address: string, chainId: string) { return getHistory(address, chainId); }
   async signTransaction(walletId: string, chainId: string, tx: TxRequest) { return signTransaction(walletId, chainId, JSON.stringify(tx, bigintReplacer)); }
   async resetVault(mnemonic: string, pass: string) { return resetVault(mnemonic, pass); }
-  async getSession() { return getSessionMnemonic(); }
   async revealMnemonic(password: string) { return revealMnemonic(password); }
 
   onLogs(cb: (l: LogEvent[]) => void) { return onLogs(cb); }
@@ -537,6 +536,7 @@ export class BoltwalletCore {
   /** Sign and broadcast a Quai transaction, recording it in history. */
   async sendQuaiTransaction(walletId: string, chainKey: string, tx: QuaiTxRequest): Promise<string> {
     const network = requireQuaiNetwork(chainKey);
+    if (!isValidAddressForChain(tx.to, chainKey)) throw new Error('Invalid or unsafe Quai recipient address');
     const { mnemonic, wallet } = await unlockedWallet(walletId);
     touchSession();
     logEvent('security', `Signing transaction for ${network.name}...`, 'info');
@@ -934,6 +934,7 @@ const toBigIntValue = (value: unknown, label: string): bigint => {
 const validateTransactionPayload = (tx: TxRequest) => {
   if (!tx.to) throw new Error("Transaction recipient (to) is missing");
   if (!ethers.isAddress(tx.to)) throw new Error("Invalid recipient address");
+  if (tx.to.toLowerCase() === ethers.ZeroAddress) throw new Error('The zero address cannot receive funds');
 
   const val = toBigIntValue(tx.value, 'Transaction value');
   if (val < 0n) throw new Error("Transaction value cannot be negative");
@@ -1290,13 +1291,13 @@ export const isValidAddressForChain = (address: string, chainKey: string): boole
   if (!chain || !address) return false;
   const trimmed = address.trim();
   switch (chain.kind) {
-    case 'evm': return ethers.isAddress(trimmed);
-    case 'sui': return isValidSuiAddress(trimmed);
+    case 'evm': return ethers.isAddress(trimmed) && trimmed.toLowerCase() !== ethers.ZeroAddress;
+    case 'sui': return isValidSuiAddress(trimmed) && !/^0x0{64}$/.test(trimmed);
     case 'bitcoin':
       try { bitcoin.address.toOutputScript(trimmed, bitcoin.networks.bitcoin); return true; } catch { return false; }
     case 'tron':
       try { tronToHexAddress(trimmed); return true; } catch { return false; }
-    case 'quai': return isCyprus1QuaiAddress(trimmed);
+    case 'quai': return isCyprus1QuaiAddress(trimmed) && trimmed.toLowerCase() !== ethers.ZeroAddress;
     default: return false;
   }
 };
@@ -1400,7 +1401,7 @@ export const signTransaction = async (walletId: string, chainId: string, txHex: 
 
     // 1. Sui (Ed25519 — real transaction signing)
     if (chainConfig.kind === 'sui') {
-      if (!isValidSuiAddress(txParams.to)) throw new Error('Invalid Sui recipient address');
+      if (!isValidAddressForChain(txParams.to, chainId)) throw new Error('Invalid or unsafe Sui recipient address');
       const amountMist = toBigIntValue(txParams.value, 'Transaction value');
       if (amountMist <= 0n) throw new Error('Amount must be greater than zero');
 
@@ -1783,11 +1784,4 @@ export const resetVault = async (mnemonic: string, pass: string): Promise<void> 
   await saveVault(vault);
   resetUnlockGuard();
   logEvent('security', 'Vault restored from recovery phrase', 'success');
-};
-
-export const getSessionMnemonic = () => {
-  // SEC-03: Check session expiry before exposing mnemonic
-  if (isSessionExpired()) return null;
-  touchSession();
-  return sessionMnemonic;
 };
