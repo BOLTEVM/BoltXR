@@ -1,0 +1,209 @@
+{
+  "version": "1.0.0",
+  "system": "Handtracking Wallet 3D XR Scene",
+  "category": "3D Diamond & Gold Studded Crypto Coins",
+  "replaces": "Legacy primitive cylinder chips (Token3D.tsx)",
+  "total_coins": 10,
+  "coins": [
+    {
+      "id": "coin_eth_diamond_gold",
+      "symbol": "ETH",
+      "network": "Ethereum Mainnet",
+      "name": "Ethereum (ETH) Celestial Platinum & Diamond Gold Coin",
+      "baseMetal": "24K Solid Yellow Gold & 950 Platinum",
+      "gemstones": "150 Hand-Set Pav\u00e9 VVS Diamonds & Ice-Blue Baguette Sapphires",
+      "sculptedRelief": "3D Faceted Ethereum Octahedron Prism with Diamond Facets",
+      "xrFeature": "Floating Volumetric Cyan Staking Telemetry & Gas Halo",
+      "imageFile": "coin_eth_diamond_gold.jpg",
+      "mpdFile": "coin_eth_diamond_gold.mpd.md",
+      "promptFile": "coin_eth_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 329229,
+      "pg04Score": 0.3144,
+      "certified": true
+    },
+    {
+      "id": "coin_btc_diamond_gold",
+      "symbol": "BTC",
+      "network": "Bitcoin Network",
+      "name": "Bitcoin (BTC) Sovereign 24K Gold & Canary Diamond Coin",
+      "baseMetal": "24K Sovereign Yellow Gold",
+      "gemstones": "Double-Row Invisible-Set Baguette VVS Diamonds & Vivid Canary Yellow Diamonds",
+      "sculptedRelief": "Deeply Sculpted 3D Bitcoin 'B' Glyph Encrusted with Canary Diamonds",
+      "xrFeature": "Micro-Etched Genesis Block Hash Ring with Amber Holographic UTXO Halo",
+      "imageFile": "coin_btc_diamond_gold.jpg",
+      "mpdFile": "coin_btc_diamond_gold.mpd.md",
+      "promptFile": "coin_btc_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 389608,
+      "pg04Score": 0.3195,
+      "certified": true
+    },
+    {
+      "id": "coin_quai_diamond_gold",
+      "symbol": "QUAI",
+      "network": "Quai Network (Cyprus-1)",
+      "name": "Quai Network (QUAI) Rose Gold & Ruby Braided Coin",
+      "baseMetal": "18K Polished Rose Gold",
+      "gemstones": "Channel-Set Pigeon-Blood Red Rubies & Pav\u00e9 White Diamonds",
+      "sculptedRelief": "3D Sculpted Intertwined Braided Consensus Infinity Emblem",
+      "xrFeature": "Glowing Crimson Shard Consensus Telemetry Orbital Ring",
+      "imageFile": "coin_quai_diamond_gold.jpg",
+      "mpdFile": "coin_quai_diamond_gold.mpd.md",
+      "promptFile": "coin_quai_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 300454,
+      "pg04Score": 0.2439,
+      "certified": true
+    },
+    {
+      "id": "coin_pol_diamond_gold",
+      "symbol": "POL",
+      "network": "Polygon Network",
+      "name": "Polygon (POL) Royal Amethyst & White Gold ZK Coin",
+      "baseMetal": "18K White Gold & Solid 950 Platinum",
+      "gemstones": "Baguette Royal Purple Amethysts & D-Flawless Diamond Pav\u00e9",
+      "sculptedRelief": "Floating 3D Polygon Infinity Knot Emblem in High-Polish Platinum",
+      "xrFeature": "Violet Zero-Knowledge Proof Matrix Holographic Glow",
+      "imageFile": "coin_pol_diamond_gold.jpg",
+      "mpdFile": "coin_pol_diamond_gold.mpd.md",
+      "promptFile": "coin_pol_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 348215,
+      "pg04Score": 0.3126,
+      "certified": true
+    },
+    {
+      "id": "coin_bnb_diamond_gold",
+      "symbol": "BNB",
+      "network": "BNB Smart Chain",
+      "name": "BNB Smart Chain (BNB) Imperial Gold & Black Diamond Coin",
+      "baseMetal": "24K Imperial Yellow Gold",
+      "gemstones": "Alternating Canary Yellow Diamonds & Black Carbonado Diamonds",
+      "sculptedRelief": "3D Interlocking Geometric Diamond BNB Logo in Frosted & Polished Gold",
+      "xrFeature": "Golden Hexagonal Holographic Telemetry Energy Ring",
+      "imageFile": "coin_bnb_diamond_gold.jpg",
+      "mpdFile": "coin_bnb_diamond_gold.mpd.md",
+      "promptFile": "coin_bnb_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 337055,
+      "pg04Score": 0.2761,
+      "certified": true
+    },
+    {
+      "id": "coin_mon_diamond_gold",
+      "symbol": "MON",
+      "network": "Monad EVM",
+      "name": "Monad (MON) Violet Titanium & Tanzanite Gold Coin",
+      "baseMetal": "24K Yellow Gold Rim & Deep Violet Anodized Titanium Core",
+      "gemstones": "Vivid Tanzanite Gemstones & Pav\u00e9 VVS Diamonds",
+      "sculptedRelief": "3D Sculpted Monad Swirling Vortex 'M' Emblem in Platinum",
+      "xrFeature": "10,000 TPS High-Frequency Data Stream Holographic Ring",
+      "imageFile": "coin_mon_diamond_gold.jpg",
+      "mpdFile": "coin_mon_diamond_gold.mpd.md",
+      "promptFile": "coin_mon_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 328794,
+      "pg04Score": 0.2584,
+      "certified": true
+    },
+    {
+      "id": "coin_sui_diamond_gold",
+      "symbol": "SUI",
+      "network": "Sui Network",
+      "name": "Sui Network (SUI) Oceanic Platinum & Aquamarine Orbital Coin",
+      "baseMetal": "950 Pure Platinum & 18K White Gold",
+      "gemstones": "Natural Aquamarine Crystal & Pav\u00e9 Diamond Orbital Ring",
+      "sculptedRelief": "3D Sui Water Droplet Glyph in Glowing Aquamarine and Platinum",
+      "xrFeature": "True 3D Floating Diamond-Studded Planetary Orbital Ring (Gyroscopic)",
+      "imageFile": "coin_sui_diamond_gold.jpg",
+      "mpdFile": "coin_sui_diamond_gold.mpd.md",
+      "promptFile": "coin_sui_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 230046,
+      "pg04Score": 0.3061,
+      "certified": true
+    },
+    {
+      "id": "coin_trx_diamond_gold",
+      "symbol": "TRX",
+      "network": "Tron Network",
+      "name": "Tron (TRX) Crimson Ruby & Polished Gold Geometric Coin",
+      "baseMetal": "24K Solid Yellow Gold",
+      "gemstones": "Baguette Red Rubies & Pav\u00e9 White Diamonds",
+      "sculptedRelief": "Faceted 3D Geometric Tron Crystal Monolith Logo in Gold",
+      "xrFeature": "Scarlet Laser-Line Telemetry Hologram",
+      "imageFile": "coin_trx_diamond_gold.jpg",
+      "mpdFile": "coin_trx_diamond_gold.mpd.md",
+      "promptFile": "coin_trx_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 269484,
+      "pg04Score": 0.3156,
+      "certified": true
+    },
+    {
+      "id": "coin_boltevm_diamond_gold",
+      "symbol": "BOLT",
+      "network": "BOLTEVM Native Layer-1",
+      "name": "BOLTEVM (BOLT) Master Apex Lightning Sovereign Medallion",
+      "baseMetal": "24K Heavy Yellow Gold & Polished Platinum",
+      "gemstones": "150-Carat Baguette VVS Diamond Bezel & Black Carbonado Accents",
+      "sculptedRelief": "3D Sculpted BOLTEVM Electric Lightning Bolt Emblem in Platinum & Cyan Enamel",
+      "xrFeature": "Pulsing High-Voltage Cyan Electric Arc Holographic Crown",
+      "imageFile": "coin_boltevm_diamond_gold.jpg",
+      "mpdFile": "coin_boltevm_diamond_gold.mpd.md",
+      "promptFile": "coin_boltevm_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 337094,
+      "pg04Score": 0.3306,
+      "certified": true
+    },
+    {
+      "id": "coin_sol_diamond_gold",
+      "symbol": "SOL",
+      "network": "Solana Network",
+      "name": "Solana (SOL) Forged Carbon & Emerald Hyper-Speed Coin",
+      "baseMetal": "18K Yellow Gold Bezel & Matte Forged Carbon Core",
+      "gemstones": "Vivid Colombian Emerald Pav\u00e9 & Purple Diamonds",
+      "sculptedRelief": "3D Sculpted Solana Three-Tiered Gradient Slat Emblem",
+      "xrFeature": "Sub-Second Proof-of-History Clockwork Telemetry Hologram",
+      "imageFile": "coin_sol_diamond_gold.jpg",
+      "mpdFile": "coin_sol_diamond_gold.mpd.md",
+      "promptFile": "coin_sol_diamond_gold_prompt.txt",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "fileSizeBytes": 304473,
+      "pg04Score": 0.2298,
+      "certified": true
+    }
+  ]
+}

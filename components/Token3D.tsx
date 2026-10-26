@@ -1,154 +1,150 @@
-import { useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Text, Float } from '@react-three/drei';
-import { Mesh, Group, Vector3 } from 'three';
+'use client';
 
 /**
- * Ticker on both faces of the coin. Rendered locally rather than from remote
- * logo images: those need CORS for WebGL, fail offline, and leak which chains
- * the user holds to third-party hosts.
+ * Token3D — one asset the wallet holds, as a living Currencychips coin.
+ *
+ * Replaces the old flat cylinder chips. The coin itself (sculpted body, gem
+ * settings, engraved and baked faces, halo, glow and animation) is
+ * lib/coins/CoinModel; this component places it, feeds it the wallet's state
+ * and turns pointer input into the same action the chips had: tap a coin to
+ * open that asset (send, receive, swap).
+ *
+ *   hover / ray     the coin turns to face you, grows, its stones chase and
+ *                   its halo brightens; the network name shows
+ *   balance up      sparks off the rim and the stones celebrate; down: a dip
+ *   network offline the halo goes red and flickers; the last balance read
+ *                   stays, labelled
+ *   no longer held  it shrinks away, then unmounts (`onGone`)
+ *
+ * Pointer events come from the mouse on the desktop and from controller rays
+ * and hands in WebXR (@react-three/xr v6), so there is one set of handlers.
+ * Only an invisible disc is ray-tested, never the hundreds of stones.
  */
-function CoinFaces({ symbol }: { symbol: string }) {
-    const size = symbol.length > 3 ? 0.09 : 0.12;
-    return (
-        <>
-            <Text position={[0, 0.042, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={size} color="white" anchorX="center" anchorY="middle">
-                {symbol}
-            </Text>
-            <Text position={[0, -0.042, 0]} rotation={[Math.PI / 2, 0, Math.PI]} fontSize={size} color="white" anchorX="center" anchorY="middle">
-                {symbol}
-            </Text>
-        </>
-    );
-}
+
+import { useEffect, useRef, useState } from 'react';
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
+import { Vector3, type Group } from 'three';
+import { CoinModel } from '@/lib/coins/CoinModel';
+import type { Holding } from '@/lib/coins/holdings';
+import { studioFor } from '@/lib/gems/studioCache';
+import { formatAmount, formatUsd } from '@/lib/format';
+
+/** Coin radius in metres at scale 1 (the old chips were 0.3). */
+export const COIN_RADIUS = 0.27;
+
+/** Coins already minted in this session come back without the drop. */
+const introduced = new Set<string>();
 
 interface Token3DProps {
-    symbol: string;
-    color: string;
-    balance: string;
-    network: string;
+    holding: Holding;
     position: [number, number, number];
-    onClick: () => void;
-    status: 'loading' | 'success' | 'error';
+    /** Turns the coin's face toward the viewer. */
+    yaw: number;
+    /** No longer held: play the exit, then call `onGone`. */
+    leaving?: boolean;
+    /** Calm mode: softer sparkle, no flips or strobing. */
+    calm?: boolean;
+    /** Milliseconds to wait before building (spreads first-load work across frames). */
+    buildDelay?: number;
+    onSelect: (chainKey: string) => void;
+    onGone?: (key: string) => void;
 }
 
-export default function Token3D({ symbol, color, balance, network, position, onClick, status }: Token3DProps) {
-    const meshRef = useRef<Mesh>(null);
+export default function Token3D({ holding, position, yaw, leaving = false, calm = false, buildDelay = 0, onSelect, onGone }: Token3DProps) {
+    const gl = useThree(s => s.gl);
     const groupRef = useRef<Group>(null);
+    const [model, setModel] = useState<CoinModel | null>(null);
     const [hovered, setHovered] = useState(false);
+    const lastAmount = useRef<number | null>(null);
+    const goneSent = useRef(false);
+    const { coin, key, asset, stale, scale, usd } = holding;
 
-    const home = useMemo(() => new Vector3(...position), [position]);
+    // build (after `buildDelay`), dispose on unmount; strict-mode safe
+    useEffect(() => {
+        let m: CoinModel | null = null;
+        const id = window.setTimeout(() => {
+            m = new CoinModel(coin, { env: studioFor(gl), quality: 'xr', calm, introAt: introduced.has(key) ? 1 : 0 });
+            introduced.add(key);
+            setModel(m);
+        }, buildDelay);
+        return () => {
+            window.clearTimeout(id);
+            m?.dispose();
+        };
+        // calm is applied live below; rebuilding for it would replay the intro
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [coin, gl, key]);
+
+    useEffect(() => { model?.setCalm(calm); }, [model, calm]);
+    useEffect(() => { model?.setStale(stale); }, [model, stale]);
+    useEffect(() => {
+        if (!model) return;
+        if (leaving) model.leave();
+        else model.stay();
+    }, [model, leaving]);
+
+    // balance moved: sparks up, a dip down (not on the first read)
+    useEffect(() => {
+        if (!model) return;
+        const prev = lastAmount.current;
+        lastAmount.current = holding.amount;
+        if (prev === null || stale) return;
+        if (holding.amount > prev) model.pulse('up');
+        else if (holding.amount < prev) model.pulse('down');
+    }, [model, holding.amount, stale]);
 
     useFrame((state, delta) => {
-        const mesh = meshRef.current;
-        if (mesh) {
-            mesh.rotation.y += delta * 0.4;
-            mesh.rotation.x = hovered || status === 'error'
-                ? Math.sin(state.clock.elapsedTime * 2) * (status === 'error' ? 0.4 : 0.2)
-                : 0;
+        const g = groupRef.current;
+        if (g) {
+            // glide into a new slot when the set of coins changes
+            g.position.lerp(_target.set(...position), 1 - Math.exp(-delta * 5));
+            g.rotation.y += (yaw - g.rotation.y) * (1 - Math.exp(-delta * 5));
         }
-        // Ease back into its slot (e.g. after the layout changes).
-        groupRef.current?.position.lerp(home, 0.1);
+        if (!model) return;
+        model.update(delta, state.clock.elapsedTime, state.camera, state.size.height * state.viewport.dpr);
+        if (model.gone && !goneSent.current) {
+            goneSent.current = true;
+            onGone?.(key);
+        }
     });
 
+    const setCursor = (value: string) => { if (typeof document !== 'undefined') document.body.style.cursor = value; };
+    const R = COIN_RADIUS * scale;
+    const amount = `${formatAmount(asset.balance, asset.balance.startsWith('0.') ? 6 : 4)} ${asset.symbol}`;
+    const sub = stale ? 'OFFLINE · LAST BALANCE READ' : hovered ? asset.network : usd !== null ? formatUsd(usd) : asset.network;
+
     return (
-        <Float floatIntensity={1} speed={2} rotationIntensity={0.5}>
-            <group 
-                ref={groupRef} 
-                position={position}
-                onClick={(e) => {
-                    // The whole coin (body, halo, labels) is the target: a spinning
-                    // coin seen edge-on is otherwise nearly impossible to hit.
-                    e.stopPropagation();
-                    onClick();
-                }}
-                onPointerOver={(e) => {
-                    e.stopPropagation();
-                    setHovered(true);
-                    document.body.style.cursor = 'pointer';
-                }}
-                onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
-            >
-                <mesh visible={false}>
-                    <circleGeometry args={[0.42, 24]} />
-                    <meshBasicMaterial />
-                </mesh>
-
-                {/* Error Halo */}
-                {status === 'error' && (
-                    <mesh position={[0, 0, -0.05]}>
-                        <ringGeometry args={[0.35, 0.4, 32]} />
-                        <meshBasicMaterial color="#ef4444" transparent opacity={0.8} />
-                    </mesh>
-                )}
-
-                {/* 3D Coin Body */}
-                <mesh
-                    ref={meshRef}
-                    scale={hovered ? 1.2 : 1}
-                    rotation={[Math.PI / 2, 0, 0]}
-                >
-                    <cylinderGeometry args={[0.3, 0.3, 0.08, 32]} />
-                    <meshStandardMaterial
-                        color={status === 'error' ? '#ef4444' : color}
-                        metalness={0.9}
-                        roughness={0.1}
-                        emissive={status === 'error' ? '#ef4444' : color}
-                        emissiveIntensity={hovered || status === 'error' ? 0.8 : 0.2}
-                    />
-
-                    {/* Logo faces (both sides) */}
-                    <CoinFaces symbol={symbol} />
-
-                </mesh>
-
-                {/* Token Symbol (Floating Label) */}
-                <Text
-                    position={[0, 0.45, 0]}
-                    fontSize={0.08}
-                    color="white"
-                    anchorX="center"
-                    anchorY="bottom"
-                >
-                    {symbol}
-                </Text>
-
-                {/* Network Indicator */}
-                <group position={[0, -0.55, 0]}>
-                    <mesh>
-                        <sphereGeometry args={[0.04, 16, 16]} />
-                        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} />
-                    </mesh>
-                    <Text
-                        position={[0.1, 0, 0]}
-                        fontSize={0.05}
-                        color={status === 'error' ? '#ef4444' : "#94a3b8"}
-                        anchorX="left"
-                        anchorY="middle"
-                    >
-                        {status === 'error' ? `${network} (OFFLINE)` : network}
+        <group ref={groupRef} position={position} rotation={[0, yaw, 0]}>
+            {model && (
+                <primitive
+                    object={model.root}
+                    scale={R}
+                    onClick={(e: ThreeEvent<MouseEvent>) => {
+                        e.stopPropagation();
+                        if (!leaving) onSelect(asset.chainKey);
+                    }}
+                    onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                        e.stopPropagation();
+                        model.setHover(true); // straight to the coin: no waiting for a re-render in the headset
+                        setHovered(true);
+                        setCursor('pointer');
+                    }}
+                    onPointerOut={() => { model.setHover(false); setHovered(false); setCursor('auto'); }}
+                />
+            )}
+            {model && !leaving && (
+                <group position={[0, -R - 0.11, 0]}>
+                    <Text fontSize={0.072} color="#f8fafc" anchorX="center" anchorY="middle" outlineWidth={0.004} outlineColor="#020617">
+                        {amount}
+                    </Text>
+                    <Text position={[0, -0.085, 0]} fontSize={0.045} color={stale ? '#fca5a5' : hovered ? coin.accent : '#94a3b8'} anchorX="center" anchorY="middle">
+                        {sub}
                     </Text>
                 </group>
-
-                {/* Balance Text */}
-                {(hovered) && (
-                    <group position={[0, 0.7, 0]}>
-                        <mesh>
-                            <planeGeometry args={[0.8, 0.25]} />
-                            <meshStandardMaterial color="#000" transparent opacity={0.8} />
-                        </mesh>
-                        <Text
-                            position={[0, 0, 0.01]}
-                            fontSize={0.12}
-                            color="white"
-                            anchorX="center"
-                            anchorY="middle"
-                        >
-                            {status === 'success' ? `${balance} ${symbol}` : status === 'loading' ? 'LOADING' : 'OFFLINE'}
-                        </Text>
-                    </group>
-                )}
-            </group>
-        </Float>
+            )}
+        </group>
     );
 }
+
+const _target = new Vector3();
