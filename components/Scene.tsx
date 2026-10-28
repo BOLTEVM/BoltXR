@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Environment, Lightformer, Grid, OrbitControls, Stars } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { useXR } from '@react-three/xr';
 import { useWallet, MIN_NEW_PIN_LENGTH } from '@/hooks/useWallet';
 import { errorMessage } from '@/lib/format';
@@ -10,17 +10,16 @@ import Dashboard from './Dashboard';
 import TransactionPanel from './TransactionPanel';
 import SwapPanel from './SwapPanel';
 import SecurityPinPad from './SecurityPinPad';
-import TokenRain from './TokenRain';
-import EnvironmentSelector, { EnvType } from './EnvironmentSelector';
+import EnvironmentSelector from './EnvironmentSelector';
+import SceneBackdrop from './xr/scenes/SceneBackdrop';
+import type { EnvType } from '@/lib/xr/scenes';
 import SecureInfoPanel from './SecureInfoPanel';
-import SafeBoundary from './xr/SafeBoundary';
 import ContractClipboard3D from './ContractClipboard3D';
 import WristWatch, { type WatchView } from './xr/WristWatch';
 import { ICED_OUT } from '@iced-out/watch';
 import { useWatchOwnership } from '../hooks/useWatchOwnership';
-import VirtualSky from './xr/VirtualSky';
 import { useSettings } from '@/hooks/useSettings';
-import { canSeeThrough, isSeeThrough, usePassthrough } from '@/lib/xr/passthrough';
+import { canSeeThrough, setPassthrough, usePassthrough } from '@/lib/xr/passthrough';
 import XRTaskPanel from './xr/XRTaskPanel';
 import PaymentPanel from './xr/PaymentPanel';
 import FarmingPanel from './xr/FarmingPanel';
@@ -30,21 +29,22 @@ import SpatialDappApproval from './xr/SpatialDappApproval';
 import { useDappBridge } from '@/hooks/useDappBridge';
 import { selectHoldings } from '@/lib/coins/holdings';
 
-const ENV_TINT: Record<EnvType, string> = {
-    space: '#6366f1',
-    sunset: '#f43f5e',
-    forest: '#10b981',
-    city: '#3b82f6',
-    rain: '#f59e0b',
-};
-
 export default function Scene() {
     const session = useXR(state => state.session);
     const passthrough = usePassthrough();
-    // passthrough: the room shows through, so no sky, stars, rain or floor grid;
-    // an AR session with passthrough off gets an opaque sky and looks like VR
-    const seeThrough = isSeeThrough(session, passthrough);
-    const virtualSky = canSeeThrough(session) && !passthrough;
+    // Passthrough is a scene of its own: in an immersive-ar session it draws no sky or world, so the
+    // room shows; every other scene draws an opaque sky, so the same session looks like VR.
+    const passthroughAvailable = canSeeThrough(session);
+    const [world, setWorld] = useState<Exclude<EnvType, 'passthrough'>>('space');
+    const env: EnvType = passthroughAvailable && passthrough ? 'passthrough' : world;
+    const selectEnv = (next: EnvType) => {
+        if (next === 'passthrough') {
+            if (passthroughAvailable) setPassthrough(true);
+            return;
+        }
+        setWorld(next);
+        setPassthrough(false);
+    };
     const { watchCalm } = useSettings();
     // only a holder wears an Iced-Out XR watch; everyone else keeps the classic Wrist OS watch.
     // A watch that self-destructs (worn without being held) is gone for the rest of the session.
@@ -61,7 +61,6 @@ export default function Scene() {
     const [watchOpen, setWatchOpen] = useState(true);
     const [watchView, setWatchView] = useState<WatchView>('home');
     const [scanChain, setScanChain] = useState('ethereum');
-    const [env, setEnv] = useState<EnvType>('space');
 
     const [showPinPad, setShowPinPad] = useState(false);
     const [pinPadAction, setPinPadAction] = useState<'unlock' | 'setup' | 'setup-confirm' | null>(null);
@@ -173,29 +172,7 @@ export default function Scene() {
 
     return (
         <>
-            <ambientLight intensity={env === 'sunset' ? 0.8 : 0.68} />
-            <directionalLight position={[4, 8, 6]} intensity={2.1} color="#e0f2fe" />
-            <pointLight position={[-6, 3, 1]} intensity={0.65} color={env === 'space' ? '#4c1d95' : '#f43f5e'} />
-
-            {virtualSky && <VirtualSky tint={ENV_TINT[env]} />}
-            {env === 'space' && !seeThrough && <Stars radius={100} depth={50} count={3500} factor={4} saturation={0} fade speed={0.6} />}
-            {env === 'rain' && !seeThrough && <SafeBoundary><TokenRain count={40} colors={rainColors} /></SafeBoundary>}
-
-            <Environment resolution={64} frames={1}>
-                <Lightformer intensity={1.2} color={ENV_TINT[env]} position={[0, 4, -6]} scale={[10, 4, 1]} />
-                <Lightformer intensity={0.6} color="#ffffff" position={[-6, 2, 2]} rotation-y={Math.PI / 2} scale={[6, 3, 1]} />
-                <Lightformer intensity={0.4} color={ENV_TINT[env]} position={[6, 1, 2]} rotation-y={-Math.PI / 2} scale={[6, 3, 1]} />
-            </Environment>
-
-            {!seeThrough && (
-                <Grid
-                    args={[20, 20]}
-                    cellColor={env === 'forest' ? '#064e3b' : '#202030'}
-                    sectionColor={env === 'forest' ? '#065f46' : '#404060'}
-                    position={[0, -2, 0]}
-                    infiniteGrid
-                />
-            )}
+            <SceneBackdrop env={env} floor={session ? 0 : -2} rainColors={rainColors} />
 
             {focusedTask === 'home' && (
                 <group position={[0.3, 2.65, -3]} scale={0.68}>
@@ -277,7 +254,7 @@ export default function Scene() {
                 // XR: a console at waist height, within reach, tilted toward the eyes (below the coin vault);
                 // desktop: low in front of the camera
                 <group position={session ? [0, 0.82, -0.62] : [0, 0.95, 1.2]} rotation={session ? [-0.6, 0, 0] : [-0.25, 0, 0]}>
-                    <EnvironmentSelector current={env} onSelect={setEnv} />
+                    <EnvironmentSelector current={env} onSelect={selectEnv} passthroughAvailable={passthroughAvailable} />
                 </group>
             )}
 

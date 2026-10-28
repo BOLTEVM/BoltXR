@@ -1,47 +1,43 @@
 'use client';
 
 /**
- * EnvironmentSelector — the scene dock: five scenes as large tiles on a console in front of you.
+ * EnvironmentSelector — the scene dock: six scenes as large tiles on a console in front of you.
  *
  * In XR it sits at waist height, tilted up toward your eyes and within arm's reach, so a hand can
  * poke a tile directly and a controller ray hits it at a shallow angle; it no longer floats (a
  * moving target is hard to aim at). Hovered tiles lift and light up, the current scene is framed.
- * On the desktop it sits low in front of the camera.
+ * On the desktop it sits low in front of the camera. Passthrough only works in an immersive-ar
+ * session; elsewhere its tile is dimmed and says so.
  */
 
 import { useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import { RoundedBox, Text } from '@react-three/drei';
 import { XR_THEME } from './xr/Button3D';
-
-export type EnvType = 'space' | 'sunset' | 'forest' | 'city' | 'rain';
+import { SCENES, SCENE_ORDER, type EnvType } from '@/lib/xr/scenes';
 
 interface EnvironmentSelectorProps {
   current: EnvType;
   onSelect: (env: EnvType) => void;
+  /** Whether this session can show the room (immersive-ar). */
+  passthroughAvailable: boolean;
 }
 
-const ENVS: { type: EnvType; label: string; color: string }[] = [
-  { type: 'space', label: 'DEEP SPACE', color: '#6366f1' },
-  { type: 'sunset', label: 'NEON SUNSET', color: '#f43f5e' },
-  { type: 'forest', label: 'ZEN GARDEN', color: '#10b981' },
-  { type: 'city', label: 'CYBER CITY', color: '#3b82f6' },
-  { type: 'rain', label: 'TOKEN RAIN', color: '#f59e0b' },
-];
+const ENVS = SCENE_ORDER.map(type => ({ type, label: SCENES[type].label, color: SCENES[type].color }));
 
-/** Tile size and spacing, metres (the dock is ~0.95 m wide). */
-const TILE_W = 0.17;
+/** Tile size and spacing, metres (the dock is ~1 m wide). */
+const TILE_W = 0.15;
 const TILE_H = 0.12;
 const GAP = 0.02;
 
-function Tile({ env, selected, x, onSelect }: { env: (typeof ENVS)[number]; selected: boolean; x: number; onSelect: (e: EnvType) => void }) {
+function Tile({ env, selected, disabled, x, onSelect }: { env: (typeof ENVS)[number]; selected: boolean; disabled: boolean; x: number; onSelect: (e: EnvType) => void }) {
   const [hovered, setHovered] = useState(false);
   const cursor = (v: string) => { if (typeof document !== 'undefined') document.body.style.cursor = v; };
   return (
     <group
-      position={[x, 0, hovered ? 0.012 : 0]}
-      onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onSelect(env.type); }}
-      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); cursor('pointer'); }}
+      position={[x, 0, hovered && !disabled ? 0.012 : 0]}
+      onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); if (!disabled) onSelect(env.type); }}
+      onPointerOver={(e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); setHovered(true); cursor(disabled ? 'not-allowed' : 'pointer'); }}
       onPointerOut={() => { setHovered(false); cursor('auto'); }}
     >
       {selected && (
@@ -51,9 +47,11 @@ function Tile({ env, selected, x, onSelect }: { env: (typeof ENVS)[number]; sele
       )}
       <RoundedBox args={[TILE_W, TILE_H, 0.022]} radius={0.016} smoothness={4}>
         <meshStandardMaterial
-          color={selected || hovered ? env.color : XR_THEME.raised}
+          color={(selected || hovered) && !disabled ? env.color : XR_THEME.raised}
           emissive={env.color}
-          emissiveIntensity={selected ? 0.55 : hovered ? 0.4 : 0.06}
+          emissiveIntensity={disabled ? 0 : selected ? 0.55 : hovered ? 0.4 : 0.06}
+          transparent={disabled}
+          opacity={disabled ? 0.5 : 1}
           metalness={0.4}
           roughness={0.35}
         />
@@ -61,16 +59,21 @@ function Tile({ env, selected, x, onSelect }: { env: (typeof ENVS)[number]; sele
       {/* colour swatch so unselected tiles still say what they are */}
       <mesh position={[0, 0.03, 0.012]}>
         <circleGeometry args={[0.016, 24]} />
-        <meshBasicMaterial color={env.color} toneMapped={false} />
+        <meshBasicMaterial color={env.color} toneMapped={false} transparent={disabled} opacity={disabled ? 0.35 : 1} />
       </mesh>
-      <Text position={[0, -0.022, 0.013]} fontSize={0.019} maxWidth={TILE_W - 0.02} textAlign="center" color={XR_THEME.text} anchorX="center" anchorY="middle">
+      <Text position={[0, -0.018, 0.013]} fontSize={0.017} maxWidth={TILE_W - 0.02} textAlign="center" color={disabled ? XR_THEME.muted : XR_THEME.text} anchorX="center" anchorY="middle">
         {env.label}
       </Text>
+      {disabled && (
+        <Text position={[0, -0.04, 0.013]} fontSize={0.012} color={XR_THEME.muted} anchorX="center" anchorY="middle">
+          AR SESSION ONLY
+        </Text>
+      )}
     </group>
   );
 }
 
-export default function EnvironmentSelector({ current, onSelect }: EnvironmentSelectorProps) {
+export default function EnvironmentSelector({ current, onSelect, passthroughAvailable }: EnvironmentSelectorProps) {
   const width = ENVS.length * TILE_W + (ENVS.length - 1) * GAP;
   return (
     <group>
@@ -82,7 +85,7 @@ export default function EnvironmentSelector({ current, onSelect }: EnvironmentSe
         SCENE
       </Text>
       {ENVS.map((env, i) => (
-        <Tile key={env.type} env={env} selected={current === env.type} x={-width / 2 + TILE_W / 2 + i * (TILE_W + GAP)} onSelect={onSelect} />
+        <Tile key={env.type} env={env} selected={current === env.type} disabled={env.type === 'passthrough' && !passthroughAvailable} x={-width / 2 + TILE_W / 2 + i * (TILE_W + GAP)} onSelect={onSelect} />
       ))}
     </group>
   );
