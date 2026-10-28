@@ -9,6 +9,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { initXrEmulation, shouldAttemptXrEmulation } from '@/lib/xr-emulation';
 import '@/lib/xr-text';
 import { xrStore, startSession } from '@/lib/xr/session';
+import { guardXRFrames } from '@/lib/xr/frame-guard';
 import Scene from './Scene';
 
 type NavigatorWithXR = Navigator & {
@@ -177,6 +178,7 @@ export default function WalletXR({ onExit, onOpenBrowser }: { onExit: () => void
                 gl={{ antialias: true, powerPreference: 'high-performance' }}
                 camera={{ position: [0, 1.6, 3], fov: 50, near: 0.03, far: 180 }}
                 onCreated={({ gl }) => {
+                    guardXRFrames();
                     gl.toneMapping = ACESFilmicToneMapping;
                     gl.toneMappingExposure = 1.08;
                     gl.domElement.addEventListener('webglcontextlost', (e) => {
